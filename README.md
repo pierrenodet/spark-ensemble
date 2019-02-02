@@ -1,15 +1,25 @@
-# spark-bagging
+# Bagging Estimator for Apache Spark ML
 
-*add project short description*
+Repository of an implementation of the Bagging Meta-Estimator à la SKlearn for a Apache Spark ML Estimator
 
-## Accessing the library
+## How to use
 
-*How to access the code*
+## Built With
 
-## Documentation
+* [Scala](https://www.scala-lang.org/) - Programming Language
+* [Spark](https://spark.apache.org/) - Big Data Framework
+* [SBT](https://www.scala-sbt.org/) - Build Tool
 
-*A link to the documentation*
+## Contributing
 
-## How to contribute
+Feel free to make open an issue or make a pull request to contribute to the repository.
 
-*How others can contribute to the project*
+## Authors
+
+* **Nodet Pierre** - *Main developer* - [GitHub Profile](https://github.com/pierrenodet)
+
+See also the list of [contributors](https://github.com/pierrenodet/spark-bagging/graphs/contributors) who participated in this project.
+
+## License
+
+This project is licensed under the Apache License Version 2.0 - see the [LICENSE](LICENSE) file for details

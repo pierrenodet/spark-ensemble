@@ -1,28 +1,39 @@
-resolvers += "Spark Packages Repo" at "http://dl.bintray.com/spark-packages/maven"
+inThisBuild(
+  List(
+    organization := "com.github.pierrenodet",
+    homepage := Some(url("https://github.com/pierrenodet/spark-bagging")),
+    licenses := List("Apache-2.0" -> url("http://www.apache.org/licenses/LICENSE-2.0")),
+    developers := List(
+      Developer(
+        "pierrenodet",
+        "Pierre Nodet",
+        "nodet.pierre@gmail.com",
+        url("https://github.com/pierrenodet"))
+    )
+  )
+)
 
 name := "spark-bagging"
-
 version := "0.0.1"
-
 scalaVersion := "2.11.12"
 
-libraryDependencies += "org.apache.spark" %% "spark-sql" % "2.4.0" % "provided"
+lazy val SparkVersion = "2.4.0"
+lazy val ScalaTestVersion = "3.0.5"
+lazy val ScalaCheckVersion = "1.13.4"
+lazy val SparkTestingBaseVersion = "0.11.0"
 
-libraryDependencies += "mrpowers" % "spark-daria" % "0.27.1-s_2.11"
+libraryDependencies += "org.apache.spark" %% "spark-sql" % SparkVersion % Provided
+libraryDependencies += "org.apache.spark" %% "spark-mllib" % SparkVersion % Provided
 
-libraryDependencies += "MrPowers" % "spark-fast-tests" % "0.17.2-s_2.11" % "test"
-libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.1" % "test"
+libraryDependencies += "com.holdenkarau" %% "spark-testing-base" % (SparkVersion + "_" + SparkTestingBaseVersion) % Test
+libraryDependencies += "org.scalatest" %% "scalatest" % ScalaTestVersion % Test
+libraryDependencies += "org.scalacheck" %% "scalacheck" % ScalaCheckVersion % Test
 
-// test suite settings
 fork in Test := true
+parallelExecution in Test := false
 javaOptions ++= Seq("-Xms512M", "-Xmx2048M", "-XX:MaxPermSize=2048M", "-XX:+CMSClassUnloadingEnabled")
-// Show runtime of tests
 testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest, "-oD")
 
-// JAR file settings
-
-// don't include Scala in the JAR file
-//assemblyOption in assembly := (assemblyOption in assembly).value.copy(includeScala = false)
-
-// Add the JAR file naming conventions described here: https://github.com/MrPowers/spark-style-guide#jar-files
-// You can add the JAR file naming conventions by running the shell script
+artifactName := { (sv: ScalaVersion, module: ModuleID, artifact: Artifact) =>
+  artifact.name + "_" + sv.binary + "-" + module.revision + "." + artifact.extension
+}
