@@ -6,6 +6,7 @@ Repository of an implementation of the Bagging Meta-Estimator à la SKlearn for 
 
 ## How to use
 
+```scala
 val data = spark.read.option("header", "true").option("inferSchema", "true").csv("src/test/resources/data/bostonhousing/train.csv")
 val Array(train, validation) = data.randomSplit(Array(0.7, 0.3))
 
@@ -25,6 +26,7 @@ brPredicted.show()
 
 val re = new RegressionEvaluator().setLabelCol("medv").setMetricName("rmse")
 println(re.evaluate(brPredicted))
+```
 
 ## Built With
 
