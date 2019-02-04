@@ -26,6 +26,7 @@ libraryDependencies += "org.apache.spark" %% "spark-sql" % SparkVersion % Provid
 libraryDependencies += "org.apache.spark" %% "spark-mllib" % SparkVersion % Provided
 
 libraryDependencies += "com.holdenkarau" %% "spark-testing-base" % (SparkVersion + "_" + SparkTestingBaseVersion) % Test
+libraryDependencies += "org.apache.spark" %% "spark-hive" % SparkVersion % Test
 libraryDependencies += "org.scalatest" %% "scalatest" % ScalaTestVersion % Test
 libraryDependencies += "org.scalacheck" %% "scalacheck" % ScalaCheckVersion % Test
 
