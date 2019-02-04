@@ -111,6 +111,14 @@ class BaggingRegressor(override val uid: String) extends Predictor[Vector, Baggi
   /** @group setParam */
   def setMaxIter(value: Int): this.type = set(maxIter, value)
 
+  /**
+    * Set the maximum level of parallelism to evaluate models in parallel.
+    * Default is 1 for serial evaluation
+    *
+    * @group expertSetParam
+    */
+  def setParallelism(value: Int): this.type = set(parallelism, value)
+
   override def copy(extra: ParamMap): BaggingRegressor = defaultCopy(extra)
 
   override protected def train(dataset: Dataset[_]): BaggingRegressionModel = instrumented { instr =>
@@ -162,7 +170,15 @@ class BaggingRegressionModel(override val uid: String, models: Array[PredictionM
 
   def this(models: Array[PredictionModel[Vector, _]]) = this(Identifiable.randomUID("BaggingRegressionModel"), models)
 
-  override def predict(features: Vector): Double = {
+  override def predict(features: Vector): Double = predictNormal(features)
+
+  def predictNormal(features: Vector): Double = {
+    val predictions = models.map(model =>
+      model.predict(features))
+    predictions.sum / predictions.length
+  }
+
+  def predictFuture(features: Vector): Double = {
     val futurePredictions = models.map(model => Future[Double] {
       model.predict(features)
     }(getExecutionContext))

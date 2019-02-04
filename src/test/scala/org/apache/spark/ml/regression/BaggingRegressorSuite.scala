@@ -15,7 +15,7 @@ class BaggingRegressorSuite extends FunSuite with DatasetSuiteBase {
     val test = spark.read.option("header", "true").option("inferSchema", "true").csv("src/test/resources/data/bostonhousing/test.csv")
 
     val vectorAssembler = new VectorAssembler().setInputCols(train.columns.filter(x => !(x.equals("ID") && x.equals("medv")))).setOutputCol("features")
-    val br = new BaggingRegressor().setBaseLearner(new DecisionTreeRegressor().setFeaturesCol("features").setLabelCol("medv")).setFeaturesCol("features").setLabelCol("medv").setMaxIter(10)
+    val br = new BaggingRegressor().setBaseLearner(new DecisionTreeRegressor().setFeaturesCol("features").setLabelCol("medv")).setFeaturesCol("features").setLabelCol("medv").setMaxIter(100).setParallelism(4)
     val rf = new RandomForestRegressor().setFeaturesCol("features").setLabelCol("medv")
 
     val brPipeline = new Pipeline().setStages((vectorAssembler :: br :: Nil).toArray)

@@ -6,6 +6,26 @@ Repository of an implementation of the Bagging Meta-Estimator à la SKlearn for 
 
 ## How to use
 
+val data = spark.read.option("header", "true").option("inferSchema", "true").csv("src/test/resources/data/bostonhousing/train.csv")
+val Array(train, validation) = data.randomSplit(Array(0.7, 0.3))
+
+val vectorAssembler = new VectorAssembler().setInputCols(train.columns.filter(x => !(x.equals("ID") && x.equals("medv")))).setOutputCol("features")
+
+val baseRegressor = new DecisionTreeRegressor().setFeaturesCol("features").setLabelCol("medv")
+val baggingRegressor = new BaggingRegressor().setBaseLearner(baseRegressor).setFeaturesCol("features").setLabelCol("medv").setMaxIter(100).setParallelism(4)
+
+val brPipeline = new Pipeline().setStages((vectorAssembler :: br :: Nil).toArray)
+
+val brModel = brPipeline.fit(train)
+
+brModel.stages(1).asInstanceOf[BaggingRegressionModel].getModels
+
+val brPredicted = brModel.transform(validation)
+brPredicted.show()
+
+val re = new RegressionEvaluator().setLabelCol("medv").setMetricName("rmse")
+println(re.evaluate(brPredicted))
+
 ## Built With
 
 * [Scala](https://www.scala-lang.org/) - Programming Language
