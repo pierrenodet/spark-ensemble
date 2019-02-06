@@ -1,7 +1,7 @@
-# Bagging Estimator for Apache Spark ML
+# Bagging Estimator for Apache Spark
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/pierrenodet/spark-bagging/blob/master/LICENSE)
 [![Build Status](https://travis-ci.org/pierrenodet/spark-bagging.svg?branch=master)](https://travis-ci.org/pierrenodet/spark-bagging)
 [![codecov](https://codecov.io/gh/pierrenodet/spark-bagging/branch/master/graph/badge.svg)](https://codecov.io/gh/pierrenodet/spark-bagging)
-[![License](https://img.shields.io/badge/license-Apache%2D2%2E0-blue.svg)](https://github.com/pierrenodet/spark-bagging/blob/master/LICENSE)
 
 Repository of an implementation of the Bagging Meta-Estimator à la SKLearn for Apache Spark ML
 
