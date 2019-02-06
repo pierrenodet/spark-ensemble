@@ -86,7 +86,7 @@ trait BaggingParams extends PredictorParams with HasMaxIter with HasParallelism 
   /** @group getParam */
   def getReduce: Array[Double] => Double = $(reduce)
 
-  setDefault(reduce -> { predictions: Array[Double] => predictions.sum / predictions.length })
+  //setDefault(reduce -> { predictions: Array[Double] => predictions.sum / predictions.length })
 
   setDefault(maxIter -> 10)
   setDefault(parallelism -> 1)

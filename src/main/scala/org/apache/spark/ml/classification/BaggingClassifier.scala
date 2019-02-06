@@ -1,8 +1,8 @@
-package org.apache.spark.ml.regression
+package org.apache.spark.ml.classification
 
 import org.apache.spark.ml.bagging.{BaggingParams, BaggingPredictionModel, BaggingPredictor, PatchedPredictionModel}
 import org.apache.spark.ml.linalg.Vector
-import org.apache.spark.ml.param._
+import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.ml.{PredictionModel, Predictor}
@@ -12,12 +12,11 @@ import org.apache.spark.util.ThreadUtils
 import scala.concurrent.Future
 import scala.concurrent.duration.Duration
 
-
-trait BaggingRegressorParams extends BaggingParams {
+trait BaggingClassifierParams extends BaggingParams {
   setDefault(reduce -> { predictions: Array[Double] => predictions.sum / predictions.length })
 }
 
-class BaggingRegressor(override val uid: String) extends Predictor[Vector, BaggingRegressor, BaggingRegressionModel] with BaggingRegressorParams with BaggingPredictor {
+class BaggingClassifier(override val uid: String) extends Predictor[Vector, BaggingClassifier, BaggingClassificationModel] with BaggingClassifierParams with BaggingPredictor {
 
   def this() = this(Identifiable.randomUID("BaggingRegressor"))
 
@@ -52,11 +51,9 @@ class BaggingRegressor(override val uid: String) extends Predictor[Vector, Baggi
     */
   def setParallelism(value: Int): this.type = set(parallelism, value)
 
-  //Set average of models for aggregating the predictions of all base learner
+  override def copy(extra: ParamMap): BaggingClassifier = defaultCopy(extra)
 
-  override def copy(extra: ParamMap): BaggingRegressor = defaultCopy(extra)
-
-  override protected def train(dataset: Dataset[_]): BaggingRegressionModel = instrumented { instr =>
+  override protected def train(dataset: Dataset[_]): BaggingClassificationModel = instrumented { instr =>
 
     //Pass some parameters automatically to baseLearner
     setBaseLearner(getBaseLearner.setFeaturesCol(getFeaturesCol).asInstanceOf[Predictor[Vector, _ <: Predictor[Vector, _, _], _ <: PredictionModel[Vector, _]]])
@@ -93,13 +90,13 @@ class BaggingRegressor(override val uid: String) extends Predictor[Vector, Baggi
 
     df.unpersist()
 
-    new BaggingRegressionModel(models.toArray)
+    new BaggingClassificationModel(models.toArray)
 
   }
+
 }
 
-
-class BaggingRegressionModel(override val uid: String, models: Array[PatchedPredictionModel]) extends RegressionModel[Vector, BaggingRegressionModel] with BaggingRegressorParams with BaggingPredictionModel {
+class BaggingClassificationModel(override val uid: String, models: Array[PatchedPredictionModel]) extends PredictionModel[Vector, BaggingClassificationModel] with BaggingClassifierParams with BaggingPredictionModel {
 
   def this(models: Array[PatchedPredictionModel]) = this(Identifiable.randomUID("BaggingRegressionModel"), models)
 
@@ -107,7 +104,7 @@ class BaggingRegressionModel(override val uid: String, models: Array[PatchedPred
 
   override def predict(features: Vector): Double = getReduce(predictNormal(features, models))
 
-  override def copy(extra: ParamMap): BaggingRegressionModel = new BaggingRegressionModel(models)
+  override def copy(extra: ParamMap): BaggingClassificationModel = new BaggingClassificationModel(models)
 
   def getModels: Array[PredictionModel[Vector, _]] = models.map(_.getModel)
 
