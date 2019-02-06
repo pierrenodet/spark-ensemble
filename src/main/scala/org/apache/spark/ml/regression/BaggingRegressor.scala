@@ -37,7 +37,7 @@ class BaggingRegressor(override val uid: String) extends Regressor[Vector, Baggi
   def setReplacementFeatures(value: Boolean): this.type = set(replacementFeatures, value)
 
   /** @group setParam */
-  def setSampleFeaturesNumber(value: Int): this.type = set(sampleFeaturesNumber, value)
+  def setSampleRatioFeatures(value: Double): this.type = set(sampleRatioFeatures, value)
 
   /** @group setParam */
   def setReduce(value: Array[Double] => Double): this.type = set(reduce, value)
@@ -123,14 +123,15 @@ class BaggingRegressor(override val uid: String) extends Regressor[Vector, Baggi
 
     def arrayIndicesSample(withReplacement: Boolean, max: Int, seed: Long)(array: Array[Int]): Array[Int] = {
 
+      val take = max.min(array.length)
       if (withReplacement) {
         val rand = new Random(seed)
-        Array.fill(max)(rand.nextInt(array.length)).distinct
+        Array.fill(take)(rand.nextInt(array.length)).distinct
       } else {
-        if (max == array.length) {
+        if (take == array.length) {
           array
         } else {
-          Random.shuffle(array.indices.toIndexedSeq).toArray.take(max)
+          Random.shuffle(array.indices.toIndexedSeq).toArray.take(take)
         }
       }.sorted
 
@@ -186,7 +187,7 @@ class BaggingRegressor(override val uid: String) extends Regressor[Vector, Baggi
         val rowSampled = df.transform(withSampledRows("weightedBag", iter))
 
         val numFeatures = getNumFeatures(df, 10000)
-        val featuresIndices: Array[Int] = arrayIndicesSample(getReplacementFeatures, getSampleFeaturesNumber, getSeed + iter)((0 until numFeatures).toArray)
+        val featuresIndices: Array[Int] = arrayIndicesSample(getReplacementFeatures, (getSampleRatioFeatures*numFeatures).toInt, getSeed + iter)((0 until numFeatures).toArray)
         val rowFeatureSampled = rowSampled.transform(withSampledFeatures(getFeaturesCol, featuresIndices))
 
         instr.logDebug(s"Start training for $iter iteration on $rowFeatureSampled with $getBaseLearner")

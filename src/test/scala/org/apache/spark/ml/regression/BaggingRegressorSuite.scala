@@ -22,7 +22,7 @@ class BaggingRegressorSuite extends FunSuite with DatasetSuiteBase {
 
     time {
       val brParamGrid = new ParamGridBuilder()
-        .addGrid(br.sampleFeaturesNumber, Array(5, 10, 14))
+        .addGrid(br.sampleRatioFeatures, Array(0.3,0.7,1))
         .addGrid(br.replacementFeatures, Array(x = false))
         .addGrid(br.replacement, Array(true, false))
         .addGrid(br.sampleRatio, Array(0.3, 0.7, 1))
@@ -41,7 +41,7 @@ class BaggingRegressorSuite extends FunSuite with DatasetSuiteBase {
       print(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getReplacement + ",")
       print(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getSampleRatio + ",")
       print(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getReplacementFeatures + ",")
-      println(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getSampleFeaturesNumber)
+      println(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getSampleRatioFeatures)
       println(brCVModel.avgMetrics.min)
 
     }
@@ -66,7 +66,7 @@ class BaggingRegressorSuite extends FunSuite with DatasetSuiteBase {
       println(cvModel.avgMetrics.mkString(","))
       print(cvModel.bestModel.asInstanceOf[RandomForestRegressionModel].getSubsamplingRate + ",")
       println(cvModel.bestModel.asInstanceOf[RandomForestRegressionModel].getMaxDepth)
-      println(cvModel.avgMetrics.max)
+      println(cvModel.avgMetrics.min)
     }
   }
 

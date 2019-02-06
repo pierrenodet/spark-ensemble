@@ -57,12 +57,12 @@ trait BaggingParams extends PredictorParams with HasMaxIter with HasParallelism 
     *
     * @group param
     */
-  val sampleFeaturesNumber: Param[Int] = new IntParam(this, "sampleFeaturesNumber", "max number of features sampled out of the dataset")
+  val sampleRatioFeatures: Param[Double] = new DoubleParam(this, "sampleFeaturesNumber", "max number of features sampled out of the dataset")
 
   /** @group getParam */
-  def getSampleFeaturesNumber: Int = $(sampleFeaturesNumber)
+  def getSampleRatioFeatures: Double = $(sampleRatioFeatures)
 
-  setDefault(sampleFeaturesNumber -> 10)
+  setDefault(sampleRatioFeatures -> 1)
 
   /**
     * param for ratio of rows sampled out of the dataset
