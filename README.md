@@ -2,7 +2,7 @@
 [![Build Status](https://travis-ci.org/pierrenodet/spark-bagging.svg?branch=master)](https://travis-ci.org/pierrenodet/spark-bagging)
 [![codecov](https://codecov.io/gh/pierrenodet/spark-bagging/branch/master/graph/badge.svg)](https://codecov.io/gh/pierrenodet/spark-bagging)
 
-Repository of an implementation of the Bagging Meta-Estimator à la SKlearn for a Apache Spark ML Estimator
+Repository of an implementation of the Bagging Meta-Estimator à la SKLearn for Apache Spark ML
 
 ## How to use
 

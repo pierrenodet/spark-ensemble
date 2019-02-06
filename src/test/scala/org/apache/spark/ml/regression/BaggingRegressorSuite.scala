@@ -1,43 +1,73 @@
 package org.apache.spark.ml.regression
 
 import com.holdenkarau.spark.testing.DatasetSuiteBase
-import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.evaluation.RegressionEvaluator
 import org.apache.spark.ml.feature.VectorAssembler
+import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
 import org.scalatest.FunSuite
 
 class BaggingRegressorSuite extends FunSuite with DatasetSuiteBase {
 
-  test("simple test") {
+  test("benchmark") {
 
-    val data = spark.read.option("header", "true").option("inferSchema", "true").csv("src/test/resources/data/bostonhousing/train.csv")
-    val Array(train, validation) = data.randomSplit(Array(0.7, 0.3))
+    val raw = spark.read.option("header", "true").option("inferSchema", "true").csv("src/test/resources/data/bostonhousing/train.csv")
     val test = spark.read.option("header", "true").option("inferSchema", "true").csv("src/test/resources/data/bostonhousing/test.csv")
 
-    val vectorAssembler = new VectorAssembler().setInputCols(train.columns.filter(x => !(x.equals("ID") && x.equals("medv")))).setOutputCol("features")
-    val br = new BaggingRegressor().setBaseLearner(new DecisionTreeRegressor().setFeaturesCol("features").setLabelCol("medv")).setFeaturesCol("features").setLabelCol("medv").setMaxIter(100).setParallelism(4)
-    val rf = new RandomForestRegressor().setFeaturesCol("features").setLabelCol("medv")
+    val vectorAssembler = new VectorAssembler().setInputCols(raw.columns.filter(x => !x.equals("ID") && !x.equals("medv"))).setOutputCol("features")
+    val br = new BaggingRegressor().setBaseLearner(new DecisionTreeRegressor()).setFeaturesCol("features").setLabelCol("medv").setMaxIter(10).setParallelism(4)
+    val rf = new RandomForestRegressor().setFeaturesCol("features").setLabelCol("medv").setNumTrees(10)
 
-    val brPipeline = new Pipeline().setStages((vectorAssembler :: br :: Nil).toArray)
-    val rfPipeline = new Pipeline().setStages((vectorAssembler :: rf :: Nil).toArray)
-
-    val brModel = brPipeline.fit(train)
-    val rfModel = rfPipeline.fit(train)
-
-    val brPredicted = brModel.transform(validation)
-    val rfPredicted = rfModel.transform(validation)
+    val data = vectorAssembler.transform(raw)
+    data.count()
 
     time {
-      brPredicted.show()
+      val brParamGrid = new ParamGridBuilder()
+        .addGrid(br.sampleFeaturesNumber, Array(5, 10, 14))
+        .addGrid(br.replacementFeatures, Array(x = false))
+        .addGrid(br.replacement, Array(true, false))
+        .addGrid(br.sampleRatio, Array(0.3, 0.7, 1))
+        .build()
+
+      val brCV = new CrossValidator()
+        .setEstimator(br)
+        .setEvaluator(new RegressionEvaluator().setLabelCol(br.getLabelCol).setPredictionCol(br.getPredictionCol).setMetricName("rmse"))
+        .setEstimatorParamMaps(brParamGrid)
+        .setNumFolds(5)
+        .setParallelism(4)
+
+      val brCVModel = brCV.fit(data)
+
+      println(brCVModel.avgMetrics.mkString(","))
+      print(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getReplacement + ",")
+      print(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getSampleRatio + ",")
+      print(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getReplacementFeatures + ",")
+      println(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getSampleFeaturesNumber)
+      println(brCVModel.avgMetrics.min)
+
     }
+
     time {
-      rfPredicted.show()
+      val paramGrid = new ParamGridBuilder()
+        .addGrid(rf.featureSubsetStrategy, Array("auto"))
+        .addGrid(rf.numTrees, Array(10))
+        .addGrid(rf.subsamplingRate, Array(0.3, 0.7, 1))
+        .addGrid(rf.maxDepth, Array(1, 10, 20))
+        .build()
+
+      val cv = new CrossValidator()
+        .setEstimator(rf)
+        .setEvaluator(new RegressionEvaluator().setLabelCol(rf.getLabelCol).setPredictionCol(rf.getPredictionCol).setMetricName("rmse"))
+        .setEstimatorParamMaps(paramGrid)
+        .setNumFolds(5)
+        .setParallelism(4)
+
+      val cvModel = cv.fit(data)
+
+      println(cvModel.avgMetrics.mkString(","))
+      print(cvModel.bestModel.asInstanceOf[RandomForestRegressionModel].getSubsamplingRate + ",")
+      println(cvModel.bestModel.asInstanceOf[RandomForestRegressionModel].getMaxDepth)
+      println(cvModel.avgMetrics.max)
     }
-
-    val re = new RegressionEvaluator().setLabelCol("medv").setMetricName("rmse")
-
-    println(re.evaluate(brPredicted))
-    println(re.evaluate(rfPredicted))
   }
 
   def time[R](block: => R): R = {

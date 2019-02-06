@@ -2,7 +2,7 @@ package org.apache.spark.ml.bagging
 
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.shared.{HasMaxIter, HasParallelism}
-import org.apache.spark.ml.param.{BooleanParam, DoubleParam, LongParam, Param}
+import org.apache.spark.ml.param._
 import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
 
 trait BaggingParams extends PredictorParams with HasMaxIter with HasParallelism {
@@ -12,11 +12,10 @@ trait BaggingParams extends PredictorParams with HasMaxIter with HasParallelism 
     *
     * @group param
     */
-  val baseLearner: Param[Predictor[Vector, _ <: Predictor[Vector, _, _], _ <: PredictionModel[Vector, _]]] = new Param(this, "baseLearner", "base learner that will get stacked with bagging")
+  val baseLearner: Param[Predictor[Vector, _ <: Predictor[Vector, _, _], _ <: PredictionModel[Vector, _]]] = new Param[Predictor[Vector, _ <: Predictor[Vector, _, _], _ <: PredictionModel[Vector, _]]](this, "baseLearner", "base learner that will get stacked with bagging")
 
   /** @group getParam */
   def getBaseLearner: Predictor[Vector, _ <: Predictor[Vector, _, _], _ <: PredictionModel[Vector, _]] = $(baseLearner)
-
   /**
     * param for whether samples are drawn with replacement
     *
@@ -27,7 +26,7 @@ trait BaggingParams extends PredictorParams with HasMaxIter with HasParallelism 
   /** @group getParam */
   def getReplacement: Boolean = $(replacement)
 
-  setDefault(replacement -> true)
+  setDefault(replacement -> false)
 
   /**
     * param for ratio of rows sampled out of the dataset
@@ -51,19 +50,19 @@ trait BaggingParams extends PredictorParams with HasMaxIter with HasParallelism 
   /** @group getParam */
   def getReplacementFeatures: Boolean = $(replacementFeatures)
 
-  setDefault(replacementFeatures -> true)
+  setDefault(replacementFeatures -> false)
 
   /**
     * param for ratio of rows sampled out of the dataset
     *
     * @group param
     */
-  val sampleFeatureRatio: Param[Double] = new DoubleParam(this, "sampleFeatureRatio", "ratio of features sampled out of the dataset")
+  val sampleFeaturesNumber: Param[Int] = new IntParam(this, "sampleFeaturesNumber", "max number of features sampled out of the dataset")
 
   /** @group getParam */
-  def getSampleFeatureRatio: Double = $(sampleFeatureRatio)
+  def getSampleFeaturesNumber: Int = $(sampleFeaturesNumber)
 
-  setDefault(sampleRatio -> 1)
+  setDefault(sampleFeaturesNumber -> 10)
 
   /**
     * param for ratio of rows sampled out of the dataset
