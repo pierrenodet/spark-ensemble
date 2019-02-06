@@ -18,7 +18,7 @@ before_cache:
   - find $HOME/.sbt        -name "*.lock"               -print -delete
 
 script:
-  - sbt ++$TRAVIS_SCALA_VERSION ci_all
+  - sbt ++$TRAVIS_SCALA_VERSION ci-all
 
 after_success:
   - bash <(curl -s https://codecov.io/bash)
