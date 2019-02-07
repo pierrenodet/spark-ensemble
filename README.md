@@ -2,8 +2,7 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/pierrenodet/spark-bagging/blob/master/LICENSE)
 [![Build Status](https://travis-ci.org/pierrenodet/spark-bagging.svg?branch=master)](https://travis-ci.org/pierrenodet/spark-bagging)
 [![codecov](https://codecov.io/gh/pierrenodet/spark-bagging/branch/master/graph/badge.svg)](https://codecov.io/gh/pierrenodet/spark-bagging)
-[![Snapshot Artifacts](https://img.shields.io/nexus/s/https/oss.sonatype.org/com.github.pierrenodet/spark-bagging_2.11.svg)](https://oss.sonatype.org/content/repositories/snapshots/com/github/pierrenodet/spark-bagging_2.11)
-[![Release Artifacts](https://img.shields.io/nexus/r/https/oss.sonatype.org/com.github.pierrenodet/spark-bagging_2.11.svg)](https://oss.sonatype.org/content/repositories/releases/com/github/pierrenodet/spark-bagging_2.11)
+[![Release Artifacts](https://img.shields.io/nexus/releases/https/oss.sonatype.org/com.github.pierrenodet/spark-bagging_2.11.svg?colorB=blue)](https://oss.sonatype.org/content/repositories/releases/com/github/pierrenodet/spark-bagging_2.11)
 
 Repository of an implementation of the Bagging Meta-Estimator à la SKLearn for Apache Spark ML
 
