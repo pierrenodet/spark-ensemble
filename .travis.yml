@@ -8,7 +8,6 @@ scala:
 sudo: false
 
 stages:
-  - name: format
   - name: compile
   - name: test
   - name: release
@@ -16,7 +15,7 @@ stages:
 
 jobs:
   include:
-    - stage: format
+    - stage: compile
       script: sbt scalafmtCheck
     - stage: compile
       script: sbt clean compile
