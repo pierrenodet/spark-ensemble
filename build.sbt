@@ -1,5 +1,4 @@
 name := "spark-bagging"
-version := "0.0.1"
 scalaVersion := "2.11.12"
 
 inThisBuild(
@@ -7,10 +6,6 @@ inThisBuild(
     organization := "com.github.pierrenodet",
     homepage := Some(url(s"https://github.com/pierrenodet/$name")),
     licenses := List("Apache-2.0" -> url("http://www.apache.org/licenses/LICENSE-2.0")),
-    scmInfo := Some(ScmInfo(
-      url(s"https://github.com/pierrenodet/$name"),
-      s"scm:git@github.com:pierrenodet/$name.git"
-    )),
     developers := List(
       Developer(
         "pierrenodet",
@@ -42,74 +37,3 @@ testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest, "-oD")
 artifactName := { (sv: ScalaVersion, module: ModuleID, artifact: Artifact) =>
   artifact.name + "_" + sv.binary + "-" + SparkVersion + "_" + module.revision + "." + artifact.extension
 }
-
-useGpg := false
-usePgpKeyHex("8CB6A95796CADBFA")
-pgpPublicRing := baseDirectory.value / "project" / ".gnupg" / "pubring.gpg"
-pgpSecretRing := baseDirectory.value / "project" / ".gnupg" / "secring.gpg"
-pgpPassphrase := sys.env.get("PGP_PASS").map(_.toArray)
-
-import ReleaseTransformations._
-
-sonatypeProfileName := organization.value
-
-// To sync with Maven central, you need to supply the following information:
-publishMavenStyle := true
-
-credentials += Credentials(
-  "Sonatype Nexus Repository Manager",
-  "oss.sonatype.org",
-  sys.env.getOrElse("SONATYPE_USER", ""),
-  sys.env.getOrElse("SONATYPE_PASS", "")
-)
-
-isSnapshot := version.value endsWith "SNAPSHOT"
-
-publishTo := Some(
-  if (isSnapshot.value)
-    Opts.resolver.sonatypeSnapshots
-  else
-    Opts.resolver.sonatypeStaging
-)
-
-releaseCrossBuild := false
-releaseProcess := Seq[ReleaseStep](
-  checkSnapshotDependencies,
-  inquireVersions,
-  runClean,
-  runTest,
-  setReleaseVersion,
-  commitReleaseVersion,
-  tagRelease,
-  releaseStepCommand("publishSigned"),
-  setNextVersion,
-  commitNextVersion,
-  releaseStepCommand("sonatypeReleaseAll"),
-  pushChanges
-)
-
-enablePlugins(GitVersioning)
-
-/* The BaseVersion setting represents the in-development (upcoming) version,
- * as an alternative to SNAPSHOTS.
- */
-git.baseVersion := version.value
-
-val ReleaseTag = """^v([\d\.]+)$""".r
-git.gitTagToVersionNumber := {
-  case ReleaseTag(v) => Some(v)
-  case _ => None
-}
-
-git.formattedShaVersion := {
-  val suffix = git.makeUncommittedSignifierSuffix(git.gitUncommittedChanges.value, git.uncommittedSignifier.value)
-
-  git.gitHeadCommit.value map {
-    _.substring(0, 7)
-  } map { sha =>
-    git.baseVersion.value + "-" + sha + suffix
-  }
-}
-
-addCommandAlias("ci-all", ";+clean ;+compile ;+coverage ;+test ;+coverageReport ;+package")
-addCommandAlias("release", ";+publishSigned ;sonatypeReleaseAll")
