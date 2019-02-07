@@ -15,4 +15,3 @@ object bfunctions {
   def slicec(x: Column, start: Column, length: Column): Column = Column(Slice(x.expr, start.expr, length.expr))
 
 }
-

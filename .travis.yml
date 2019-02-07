@@ -17,7 +17,7 @@ stages:
 jobs:
   include:
     - stage: format
-      script: sbt myproject/scalafmt myproject/test:scalafmt
+      script: sbt scalafmtCheck
     - stage: compile
       script: sbt clean compile
     - stage: test

@@ -12,22 +12,29 @@ trait BaggingPredictionModel {
     models.map(model => {
       val indices = model.getIndices
       val subFeatures = features match {
-        case features: DenseVector => Vectors.dense(indices.map(features.apply))
+        case features: DenseVector  => Vectors.dense(indices.map(features.apply))
         case features: SparseVector => features.slice(indices)
       }
       model.getModel.predict(subFeatures)
     })
   }
 
-  def predictFuture(features: Vector, models: Array[PatchedPredictionModel], executionContext: ExecutionContext): Array[Double] = {
-    val futurePredictions = models.map(model => Future[Double] {
-      val indices = model.getIndices
-      val subFeatures = features match {
-        case features: DenseVector => Vectors.dense(indices.map(features.apply))
-        case features: SparseVector => features.slice(indices)
-      }
-      model.getModel.predict(subFeatures)
-    }(executionContext))
+  def predictFuture(
+    features: Vector,
+    models: Array[PatchedPredictionModel],
+    executionContext: ExecutionContext
+  ): Array[Double] = {
+    val futurePredictions = models.map(
+      model =>
+        Future[Double] {
+          val indices = model.getIndices
+          val subFeatures = features match {
+            case features: DenseVector  => Vectors.dense(indices.map(features.apply))
+            case features: SparseVector => features.slice(indices)
+          }
+          model.getModel.predict(subFeatures)
+        }(executionContext)
+    )
     futurePredictions.map(ThreadUtils.awaitResult(_, Duration.Inf))
   }
 

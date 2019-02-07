@@ -43,11 +43,12 @@ trait BaggingPredictor {
     if (withReplacement) {
       val poisson = new PoissonDistribution(sampleRatio)
       poisson.reseedRandomGenerator(seed)
-      array.flatMap(d =>
-        if (poisson.sample() > 1) {
-          Seq(d)
-        } else {
-          Seq.empty[Double]
+      array.flatMap(
+        d =>
+          if (poisson.sample() > 1) {
+            Seq(d)
+          } else {
+            Seq.empty[Double]
         }
       )
     } else {
@@ -55,11 +56,12 @@ trait BaggingPredictor {
         array
       } else {
         val rng = new XORShiftRandom(seed)
-        array.flatMap(d =>
-          if (rng.nextDouble() < sampleRatio) {
-            Seq(d)
-          } else {
-            Seq.empty[Double]
+        array.flatMap(
+          d =>
+            if (rng.nextDouble() < sampleRatio) {
+              Seq(d)
+            } else {
+              Seq.empty[Double]
           }
         )
       }
@@ -83,7 +85,9 @@ trait BaggingPredictor {
 
   }
 
-  def withWeightedBag(withReplacement: Boolean, sampleRatio: Double, numberSamples: Int, seed: Long, outputColName: String)(df: DataFrame): DataFrame = {
+  def withWeightedBag(withReplacement: Boolean, sampleRatio: Double, numberSamples: Int, seed: Long, outputColName: String)(
+    df: DataFrame
+  ): DataFrame = {
     df.withColumn(outputColName, weightBag(withReplacement, sampleRatio, numberSamples, seed))
   }
 
@@ -94,17 +98,17 @@ trait BaggingPredictor {
   def withSampledFeatures(featuresColName: String, indices: Array[Int])(df: DataFrame): DataFrame = {
     val slicer = udf { vec: Vector =>
       vec match {
-        case features: DenseVector => Vectors.dense(indices.map(features.apply))
+        case features: DenseVector  => Vectors.dense(indices.map(features.apply))
         case features: SparseVector => features.slice(indices)
       }
     }
     df.withColumn(featuresColName, slicer(col(featuresColName)))
   }
 
-  def getNumFeatures(dataset: Dataset[_],featuresCol:String): Int = {
+  def getNumFeatures(dataset: Dataset[_], featuresCol: String): Int = {
     BaggingMetadataUtils.getNumFeatures(dataset.schema(featuresCol)) match {
       case Some(n: Int) => n
-      case None =>
+      case None         =>
         // Get number of classes from dataset itself.
         val sizeFeaturesCol: Array[Row] = dataset.select(size(col(featuresCol))).take(1)
         if (sizeFeaturesCol.isEmpty || sizeFeaturesCol(0).get(0) == null) {
@@ -115,7 +119,5 @@ trait BaggingPredictor {
         numFeatures
     }
   }
-
-
 
 }

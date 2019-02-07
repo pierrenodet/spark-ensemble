@@ -8,22 +8,24 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.{AnalysisException, Column}
 import org.apache.spark.util.Utils
 
-case class Poisson(left: Expression, right: Expression) extends BinaryExpression with ExpectsInputTypes with Stateful with ExpressionWithRandomSeed {
+case class Poisson(left: Expression, right: Expression)
+    extends BinaryExpression
+    with ExpectsInputTypes
+    with Stateful
+    with ExpressionWithRandomSeed {
 
   @transient protected var poisson: PoissonDistribution = _
 
   @transient protected lazy val lambda: Double = left match {
-    case Literal(s, FloatType) => s.asInstanceOf[Float]
+    case Literal(s, FloatType)  => s.asInstanceOf[Float]
     case Literal(s, DoubleType) => s.asInstanceOf[Double]
-    case _ => throw new AnalysisException(
-      s"Input argument to $prettyName must be an float, double or null literal.")
+    case _                      => throw new AnalysisException(s"Input argument to $prettyName must be an float, double or null literal.")
   }
 
   @transient protected lazy val seed: Long = right match {
     case Literal(s, IntegerType) => s.asInstanceOf[Int]
-    case Literal(s, LongType) => s.asInstanceOf[Long]
-    case _ => throw new AnalysisException(
-      s"Input argument to $prettyName must be an integer, long or null literal.")
+    case Literal(s, LongType)    => s.asInstanceOf[Long]
+    case _                       => throw new AnalysisException(s"Input argument to $prettyName must be an integer, long or null literal.")
   }
 
   override protected def initializeInternal(partitionIndex: Int): Unit = {
@@ -35,7 +37,8 @@ case class Poisson(left: Expression, right: Expression) extends BinaryExpression
 
   override def dataType: DataType = IntegerType
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(FloatType, DoubleType), TypeCollection(IntegerType, LongType))
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(FloatType, DoubleType), TypeCollection(IntegerType, LongType))
 
   def this(param: Expression) = this(param, Literal(Utils.random.nextLong(), LongType))
 
@@ -48,12 +51,10 @@ case class Poisson(left: Expression, right: Expression) extends BinaryExpression
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val className = classOf[PoissonDistribution].getName
     val poissonTerm = ctx.addMutableState(className, "poisson")
-    ctx.addPartitionInitializationStatement(
-      s"""$poissonTerm = new $className($lambda);
+    ctx.addPartitionInitializationStatement(s"""$poissonTerm = new $className($lambda);
          $poissonTerm.reseedRandomGenerator(${seed}L + partitionIndex);""".stripMargin)
-    ev.copy(code =
-      code"""final ${CodeGenerator.javaType(dataType)} ${ev.value} = $poissonTerm.sample();""",
-      isNull = FalseLiteral)
+    ev.copy(code = code"""final ${CodeGenerator
+      .javaType(dataType)} ${ev.value} = $poissonTerm.sample();""", isNull = FalseLiteral)
   }
 
   override def freshCopy(): Poisson = Poisson(left, right)

@@ -12,19 +12,24 @@ import org.apache.spark.util.ThreadUtils
 import scala.concurrent.Future
 import scala.concurrent.duration.Duration
 
-
 trait BaggingRegressorParams extends BaggingParams {
-  setDefault(reduce -> { predictions: Array[Double] => predictions.sum / predictions.length })
+  setDefault(reduce -> { predictions: Array[Double] =>
+    predictions.sum / predictions.length
+  })
 }
 
-class BaggingRegressor(override val uid: String) extends Predictor[Vector, BaggingRegressor, BaggingRegressionModel] with BaggingRegressorParams with BaggingPredictor {
+class BaggingRegressor(override val uid: String)
+    extends Predictor[Vector, BaggingRegressor, BaggingRegressionModel]
+    with BaggingRegressorParams
+    with BaggingPredictor {
 
   def this() = this(Identifiable.randomUID("BaggingRegressor"))
 
   // Parameters from BaggingRegressorParams:
 
   /** @group setParam */
-  def setBaseLearner(value: Predictor[Vector, _ <: Predictor[Vector, _, _], _ <: PredictionModel[Vector, _]]): this.type = set(baseLearner, value)
+  def setBaseLearner(value: Predictor[Vector, _ <: Predictor[Vector, _, _], _ <: PredictionModel[Vector, _]]): this.type =
+    set(baseLearner, value)
 
   /** @group setParam */
   def setReplacement(value: Boolean): this.type = set(replacement, value)
@@ -57,37 +62,50 @@ class BaggingRegressor(override val uid: String) extends Predictor[Vector, Baggi
   override def copy(extra: ParamMap): BaggingRegressor = defaultCopy(extra)
 
   override protected def train(dataset: Dataset[_]): BaggingRegressionModel = instrumented { instr =>
-
     //Pass some parameters automatically to baseLearner
-    setBaseLearner(getBaseLearner.setFeaturesCol(getFeaturesCol).asInstanceOf[Predictor[Vector, _ <: Predictor[Vector, _, _], _ <: PredictionModel[Vector, _]]])
-    setBaseLearner(getBaseLearner.setLabelCol(getLabelCol).asInstanceOf[Predictor[Vector, _ <: Predictor[Vector, _, _], _ <: PredictionModel[Vector, _]]])
+    setBaseLearner(
+      getBaseLearner
+        .setFeaturesCol(getFeaturesCol)
+        .asInstanceOf[Predictor[Vector, _ <: Predictor[Vector, _, _], _ <: PredictionModel[Vector, _]]]
+    )
+    setBaseLearner(
+      getBaseLearner
+        .setLabelCol(getLabelCol)
+        .asInstanceOf[Predictor[Vector, _ <: Predictor[Vector, _, _], _ <: PredictionModel[Vector, _]]]
+    )
 
     instr.logPipelineStage(this)
     //    instr.logDataset(dataset)
     instr.logParams(this, maxIter, seed, parallelism)
 
-    val withBag = dataset.toDF().transform(withWeightedBag(getReplacement, getSampleRatio, getMaxIter, getSeed, "weightedBag"))
+    val withBag =
+      dataset.toDF().transform(withWeightedBag(getReplacement, getSampleRatio, getMaxIter, getSeed, "weightedBag"))
 
     val df = withBag.cache()
 
-    val futureModels = (0 until getMaxIter).map(iter =>
-      Future[PatchedPredictionModel] {
+    val futureModels = (0 until getMaxIter).map(
+      iter =>
+        Future[PatchedPredictionModel] {
 
-        val rowSampled = df.transform(withSampledRows("weightedBag", iter))
+          val rowSampled = df.transform(withSampledRows("weightedBag", iter))
 
-        val numFeatures = getNumFeatures(df, getFeaturesCol)
-        val featuresIndices: Array[Int] = arrayIndicesSample(getReplacementFeatures, (getSampleRatioFeatures * numFeatures).toInt, getSeed + iter)((0 until numFeatures).toArray)
-        val rowFeatureSampled = rowSampled.transform(withSampledFeatures(getFeaturesCol, featuresIndices))
+          val numFeatures = getNumFeatures(df, getFeaturesCol)
+          val featuresIndices: Array[Int] =
+            arrayIndicesSample(getReplacementFeatures, (getSampleRatioFeatures * numFeatures).toInt, getSeed + iter)(
+              (0 until numFeatures).toArray
+            )
+          val rowFeatureSampled = rowSampled.transform(withSampledFeatures(getFeaturesCol, featuresIndices))
 
-        instr.logDebug(s"Start training for $iter iteration on $rowFeatureSampled with $getBaseLearner")
+          instr.logDebug(s"Start training for $iter iteration on $rowFeatureSampled with $getBaseLearner")
 
-        val model = getBaseLearner.fit(rowFeatureSampled)
+          val model = getBaseLearner.fit(rowFeatureSampled)
 
-        instr.logDebug(s"Training done for $iter iteration on $rowFeatureSampled with $getBaseLearner")
+          instr.logDebug(s"Training done for $iter iteration on $rowFeatureSampled with $getBaseLearner")
 
-        new PatchedPredictionModel(featuresIndices, model)
+          new PatchedPredictionModel(featuresIndices, model)
 
-      }(getExecutionContext))
+        }(getExecutionContext)
+    )
 
     val models = futureModels.map(f => ThreadUtils.awaitResult(f, Duration.Inf))
 
@@ -98,8 +116,10 @@ class BaggingRegressor(override val uid: String) extends Predictor[Vector, Baggi
   }
 }
 
-
-class BaggingRegressionModel(override val uid: String, models: Array[PatchedPredictionModel]) extends RegressionModel[Vector, BaggingRegressionModel] with BaggingRegressorParams with BaggingPredictionModel {
+class BaggingRegressionModel(override val uid: String, models: Array[PatchedPredictionModel])
+    extends RegressionModel[Vector, BaggingRegressionModel]
+    with BaggingRegressorParams
+    with BaggingPredictionModel {
 
   def this(models: Array[PatchedPredictionModel]) = this(Identifiable.randomUID("BaggingRegressionModel"), models)
 
@@ -112,4 +132,3 @@ class BaggingRegressionModel(override val uid: String, models: Array[PatchedPred
   def getModels: Array[PredictionModel[Vector, _]] = models.map(_.getModel)
 
 }
-

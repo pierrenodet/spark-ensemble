@@ -12,10 +12,16 @@ trait BaggingParams extends PredictorParams with HasMaxIter with HasParallelism 
     *
     * @group param
     */
-  val baseLearner: Param[Predictor[Vector, _ <: Predictor[Vector, _, _], _ <: PredictionModel[Vector, _]]] = new Param[Predictor[Vector, _ <: Predictor[Vector, _, _], _ <: PredictionModel[Vector, _]]](this, "baseLearner", "base learner that will get stacked with bagging")
+  val baseLearner: Param[Predictor[Vector, _ <: Predictor[Vector, _, _], _ <: PredictionModel[Vector, _]]] =
+    new Param[Predictor[Vector, _ <: Predictor[Vector, _, _], _ <: PredictionModel[Vector, _]]](
+      this,
+      "baseLearner",
+      "base learner that will get stacked with bagging"
+    )
 
   /** @group getParam */
   def getBaseLearner: Predictor[Vector, _ <: Predictor[Vector, _, _], _ <: PredictionModel[Vector, _]] = $(baseLearner)
+
   /**
     * param for whether samples are drawn with replacement
     *
@@ -45,7 +51,8 @@ trait BaggingParams extends PredictorParams with HasMaxIter with HasParallelism 
     *
     * @group param
     */
-  val replacementFeatures: Param[Boolean] = new BooleanParam(this, "replacementFeautres", "whether features sampling are drawn with replacement")
+  val replacementFeatures: Param[Boolean] =
+    new BooleanParam(this, "replacementFeautres", "whether features sampling are drawn with replacement")
 
   /** @group getParam */
   def getReplacementFeatures: Boolean = $(replacementFeatures)
@@ -57,7 +64,8 @@ trait BaggingParams extends PredictorParams with HasMaxIter with HasParallelism 
     *
     * @group param
     */
-  val sampleRatioFeatures: Param[Double] = new DoubleParam(this, "sampleFeaturesNumber", "max number of features sampled out of the dataset")
+  val sampleRatioFeatures: Param[Double] =
+    new DoubleParam(this, "sampleFeaturesNumber", "max number of features sampled out of the dataset")
 
   /** @group getParam */
   def getSampleRatioFeatures: Double = $(sampleRatioFeatures)
@@ -88,7 +96,7 @@ trait BaggingParams extends PredictorParams with HasMaxIter with HasParallelism 
 
   //setDefault(reduce -> { predictions: Array[Double] => predictions.sum / predictions.length })
 
-  setDefault(maxIter -> 10)
+  setDefault(maxIter     -> 10)
   setDefault(parallelism -> 1)
 
 }
