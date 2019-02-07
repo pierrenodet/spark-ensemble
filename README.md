@@ -4,7 +4,27 @@
 [![codecov](https://codecov.io/gh/pierrenodet/spark-bagging/branch/master/graph/badge.svg)](https://codecov.io/gh/pierrenodet/spark-bagging)
 [![Release Artifacts](https://img.shields.io/nexus/releases/https/oss.sonatype.org/com.github.pierrenodet/spark-bagging_2.11.svg?colorB=blue)](https://oss.sonatype.org/content/repositories/releases/com/github/pierrenodet/spark-bagging_2.11)
 
-Repository of an implementation of the Bagging Meta-Estimator à la SKLearn for Apache Spark ML
+Repository of an implementation of the Bagging Meta-Estimator à la scikit-learn for Apache Spark ML
+
+## Setup
+
+Download the dependency from Sonatype
+
+**SBT**
+
+```scala
+libraryDependencies += "com.github.pierrenodet" % "spark-bagging" % "0.0.1"
+```
+
+**Maven**
+
+```maven-pom
+<dependency>
+  <groupId>com.github.pierrenodet</groupId>
+  <artifactId>spark-bagging_2.11</artifactId>
+  <version>0.0.1</version>
+</dependency>
+```
 
 ## How to use
 
