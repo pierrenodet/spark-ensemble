@@ -38,7 +38,10 @@ class BaggingRegressorSuite extends FunSuite with DatasetSuiteBase {
       val brCVModel = brCV.fit(data)
 
       println(brCVModel.avgMetrics.mkString(","))
-      println(brCVModel.bestModel.asInstanceOf[BoostingRegressionModel].getLearningRate)
+      print(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getReplacement + ",")
+      print(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getSampleRatio + ",")
+      print(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getReplacementFeatures + ",")
+      println(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getSampleRatioFeatures)
       println(brCVModel.avgMetrics.min)
 
     }
