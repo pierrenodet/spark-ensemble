@@ -89,7 +89,8 @@ trait BaggingParams extends PredictorParams with HasMaxIter with HasParallelism 
     *
     * @group param
     */
-  val reduce: Param[Array[Double] => Double] = new Param(this, "reduce", "function to reduce the predictions of the models")
+  val reduce: Param[Array[Double] => Double] =
+    new Param(this, "reduce", "function to reduce the predictions of the models")
 
   /** @group getParam */
   def getReduce: Array[Double] => Double = $(reduce)

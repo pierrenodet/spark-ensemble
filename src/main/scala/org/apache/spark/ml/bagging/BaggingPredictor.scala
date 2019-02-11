@@ -6,6 +6,7 @@ import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.util.BaggingMetadataUtils
 import org.apache.spark.sql.bfunctions.poisson
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.util.random.XORShiftRandom
 
@@ -13,21 +14,24 @@ import scala.util.Random
 
 trait BaggingPredictor {
 
+  /*
   val toArr: Any => Array[Double] = _.asInstanceOf[DenseVector].toArray
   val toArrUdf = udf(toArr)
 
   val toVector: Seq[Double] => Vector = seq => Vectors.dense(seq.toArray)
   val toVectorUdf = udf(toVector)
-
+   */
   //TODO: Try to find spark functions for Array.fill(array_repeat), find better than if expr for withoutReplacement
   def weightBag(withReplacement: Boolean, sampleRatio: Double, numberSamples: Int, seed: Long): Column = {
 
+    require(sampleRatio > 0, "sampleRatio must be strictly positive")
     if (withReplacement) {
       array((0 until numberSamples).map(iter => poisson(sampleRatio, seed + iter)): _*)
     } else {
       if (sampleRatio == 1) {
         array_repeat(lit(1), numberSamples)
       } else {
+        require(sampleRatio <= 1, s"Without replacement, the sampleRatio cannot be greater to one")
         array((0 until numberSamples).map(iter => expr(s"if(rand($seed+$iter)<$sampleRatio,1,0)")): _*)
       }
     }
@@ -35,7 +39,7 @@ trait BaggingPredictor {
   }
 
   def duplicateRow(col: Column): Column = {
-    explode(array_repeat(lit(1), col))
+    explode(array_repeat(lit(1), col.cast(IntegerType)))
   }
 
   def arraySample(withReplacement: Boolean, sampleRatio: Double, seed: Long)(array: Seq[Double]): Seq[Double] = {
@@ -85,7 +89,13 @@ trait BaggingPredictor {
 
   }
 
-  def withWeightedBag(withReplacement: Boolean, sampleRatio: Double, numberSamples: Int, seed: Long, outputColName: String)(
+  def withWeightedBag(
+    withReplacement: Boolean,
+    sampleRatio: Double,
+    numberSamples: Int,
+    seed: Long,
+    outputColName: String
+  )(
     df: DataFrame
   ): DataFrame = {
     df.withColumn(outputColName, weightBag(withReplacement, sampleRatio, numberSamples, seed))
@@ -93,6 +103,10 @@ trait BaggingPredictor {
 
   def withSampledRows(weightsColName: String, index: Int)(df: DataFrame): DataFrame = {
     df.withColumn("dummy", duplicateRow(col(weightsColName)(index))).drop(col("dummy"))
+  }
+
+  def withSampledRows(weightsColName: String)(df: DataFrame): DataFrame = {
+    df.withColumn("dummy", duplicateRow(col(weightsColName))).drop(col("dummy"))
   }
 
   def withSampledFeatures(featuresColName: String, indices: Array[Int])(df: DataFrame): DataFrame = {

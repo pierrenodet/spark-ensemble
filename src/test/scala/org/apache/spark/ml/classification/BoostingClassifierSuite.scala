@@ -6,7 +6,7 @@ import org.apache.spark.ml.feature.{StringIndexer, VectorAssembler}
 import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
 import org.scalatest.FunSuite
 
-class BaggingClassifierSuite extends FunSuite with DatasetSuiteBase {
+class BoostingClassifierSuite extends FunSuite with DatasetSuiteBase {
 
   test("benchmark") {
 
@@ -14,42 +14,38 @@ class BaggingClassifierSuite extends FunSuite with DatasetSuiteBase {
 
     val vectorAssembler = new VectorAssembler().setInputCols(raw.columns.filter(x => !x.equals("class"))).setOutputCol("features")
     val stringIndexer = new StringIndexer().setInputCol("class").setOutputCol("label")
-    val br = new BaggingClassifier().setBaseLearner(new DecisionTreeClassifier()).setMaxIter(10).setParallelism(4)
+    val br = new BoostingClassifier().setBaseLearner(new DecisionTreeClassifier()).setMaxIter(10)
     val rf = new RandomForestClassifier().setNumTrees(10)
 
     val data = stringIndexer.fit(raw).transform(vectorAssembler.transform(raw))
-    data.count()
+    data.cache()
 
     time {
       val brParamGrid = new ParamGridBuilder()
-        .addGrid(br.sampleRatioFeatures, Array(0.3,0.7,1))
-        .addGrid(br.replacementFeatures, Array(x = false))
-        .addGrid(br.replacement, Array(true, false))
-        .addGrid(br.sampleRatio, Array(0.3, 0.7, 1))
-        .build()
+    .addGrid(br.learningRate, Array(0.8,1.0))
+    .build()
 
       val brCV = new CrossValidator()
-        .setEstimator(br)
-        .setEvaluator(new MulticlassClassificationEvaluator().setLabelCol(br.getLabelCol).setPredictionCol(br.getPredictionCol))
-        .setEstimatorParamMaps(brParamGrid)
-        .setNumFolds(5)
-        .setParallelism(4)
+    .setEstimator(br)
+    .setEvaluator(
+      new MulticlassClassificationEvaluator().setLabelCol(br.getLabelCol).setPredictionCol(br.getPredictionCol)
+    )
+    .setEstimatorParamMaps(brParamGrid)
+    .setNumFolds(5)
+    .setParallelism(4)
 
       val brCVModel = brCV.fit(data)
 
       println(brCVModel.avgMetrics.mkString(","))
-      print(brCVModel.bestModel.asInstanceOf[BaggingClassificationModel].getReplacement + ",")
-      print(brCVModel.bestModel.asInstanceOf[BaggingClassificationModel].getSampleRatio + ",")
-      print(brCVModel.bestModel.asInstanceOf[BaggingClassificationModel].getReplacementFeatures + ",")
-      println(brCVModel.bestModel.asInstanceOf[BaggingClassificationModel].getSampleRatioFeatures)
+      println(brCVModel.bestModel.asInstanceOf[BoostingClassificationModel].getLearningRate)
       println(brCVModel.avgMetrics.min)
-
     }
 
     time {
       val paramGrid = new ParamGridBuilder()
         .addGrid(rf.featureSubsetStrategy, Array("auto"))
         .addGrid(rf.subsamplingRate, Array(0.3, 0.7, 1))
+        .addGrid(rf.maxDepth, Array(1, 10, 20))
         .build()
 
       val cv = new CrossValidator()
@@ -62,7 +58,8 @@ class BaggingClassifierSuite extends FunSuite with DatasetSuiteBase {
       val cvModel = cv.fit(data)
 
       println(cvModel.avgMetrics.mkString(","))
-      println(cvModel.bestModel.asInstanceOf[RandomForestClassificationModel].getSubsamplingRate)
+      print(cvModel.bestModel.asInstanceOf[RandomForestClassificationModel].getSubsamplingRate + ",")
+      println(cvModel.bestModel.asInstanceOf[RandomForestClassificationModel].getMaxDepth)
       println(cvModel.avgMetrics.min)
     }
   }

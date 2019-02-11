@@ -1,10 +1,10 @@
-# Bagging Estimator for Apache Spark
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/pierrenodet/spark-bagging/blob/master/LICENSE)
-[![Build Status](https://travis-ci.org/pierrenodet/spark-bagging.svg?branch=master)](https://travis-ci.org/pierrenodet/spark-bagging)
-[![codecov](https://codecov.io/gh/pierrenodet/spark-bagging/branch/master/graph/badge.svg)](https://codecov.io/gh/pierrenodet/spark-bagging)
-[![Maven Central](https://img.shields.io/maven-central/v/com.github.pierrenodet/spark-bagging_2.11.svg?label=maven-central&colorB=blue)](https://search.maven.org/search?q=g:%22com.github.pierrenodet%22%20AND%20a:%22spark-bagging_2.11%22)
+# Ensemble Estimators for Apache Spark
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/pierrenodet/spark-ensemble/blob/master/LICENSE)
+[![Build Status](https://travis-ci.org/pierrenodet/spark-ensemble.svg?branch=master)](https://travis-ci.org/pierrenodet/spark-ensemble)
+[![codecov](https://codecov.io/gh/pierrenodet/spark-ensemble/branch/master/graph/badge.svg)](https://codecov.io/gh/pierrenodet/spark-ensemble)
+[![Maven Central](https://img.shields.io/maven-central/v/com.github.pierrenodet/spark-ensemble_2.11.svg?label=maven-central&colorB=blue)](https://search.maven.org/search?q=g:%22com.github.pierrenodet%22%20AND%20a:%22spark-ensemble_2.11%22)
 
-Repository of an implementation of the Bagging Meta-Estimator à la scikit-learn for Apache Spark ML
+Library of Meta-Estimators à la scikit-learn for Ensemble Learning for Apache Spark ML
 
 ## Setup
 
@@ -13,7 +13,7 @@ Download the dependency from Sonatype
 **SBT**
 
 ```scala
-libraryDependencies += "com.github.pierrenodet" % "spark-bagging" % "0.0.1"
+libraryDependencies += "com.github.pierrenodet" % "spark-ensemble" % "0.1.0"
 ```
 
 **Maven**
@@ -21,12 +21,14 @@ libraryDependencies += "com.github.pierrenodet" % "spark-bagging" % "0.0.1"
 ```maven-pom
 <dependency>
   <groupId>com.github.pierrenodet</groupId>
-  <artifactId>spark-bagging_2.11</artifactId>
-  <version>0.0.1</version>
+  <artifactId>spark-ensemble_2.11</artifactId>
+  <version>0.1.0</version>
 </dependency>
 ```
 
 ## How to use
+
+**Bagging**
 
 ```scala
 val data = spark.read.option("header", "true").option("inferSchema", "true").csv("src/test/resources/data/bostonhousing/train.csv")
@@ -62,7 +64,7 @@ Feel free to open an issue or make a pull request to contribute to the repositor
 
 ## Authors
 
-* **Nodet Pierre** - *Main developer* - [GitHub Profile](https://github.com/pierrenodet)
+* **Pierre Nodet** - *Main developer* - [GitHub Profile](https://github.com/pierrenodet)
 
 See also the list of [contributors](https://github.com/pierrenodet/spark-bagging/graphs/contributors) who participated in this project.
 

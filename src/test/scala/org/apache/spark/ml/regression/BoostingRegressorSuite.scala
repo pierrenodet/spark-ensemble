@@ -6,7 +6,7 @@ import org.apache.spark.ml.feature.VectorAssembler
 import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
 import org.scalatest.FunSuite
 
-class BaggingRegressorSuite extends FunSuite with DatasetSuiteBase {
+class BoostingRegressorSuite extends FunSuite with DatasetSuiteBase {
 
   test("benchmark") {
 
@@ -14,18 +14,15 @@ class BaggingRegressorSuite extends FunSuite with DatasetSuiteBase {
     val test = spark.read.option("header", "true").option("inferSchema", "true").csv("src/test/resources/data/bostonhousing/test.csv")
 
     val vectorAssembler = new VectorAssembler().setInputCols(raw.columns.filter(x => !x.equals("ID") && !x.equals("medv"))).setOutputCol("features")
-    val br = new BaggingRegressor().setBaseLearner(new DecisionTreeRegressor()).setFeaturesCol("features").setLabelCol("medv").setMaxIter(10).setParallelism(4)
-    val rf = new RandomForestRegressor().setFeaturesCol("features").setLabelCol("medv").setNumTrees(10)
+    val br = new BoostingRegressor().setBaseLearner(new DecisionTreeRegressor()).setFeaturesCol("features").setLabelCol("medv").setMaxIter(10)
+    val gbt = new GBTRegressor().setFeaturesCol("features").setLabelCol("medv").setMaxIter(10)
 
     val data = vectorAssembler.transform(raw)
-    data.count()
+    data.cache()
 
     time {
       val brParamGrid = new ParamGridBuilder()
-        .addGrid(br.sampleRatioFeatures, Array(0.3,0.7,1))
-        .addGrid(br.replacementFeatures, Array(x = false))
-        .addGrid(br.replacement, Array(true, false))
-        .addGrid(br.sampleRatio, Array(0.3, 0.7, 1))
+        .addGrid(br.learningRate, Array(0.32,0.35,0.4,0.41))
         .build()
 
       val brCV = new CrossValidator()
@@ -38,24 +35,20 @@ class BaggingRegressorSuite extends FunSuite with DatasetSuiteBase {
       val brCVModel = brCV.fit(data)
 
       println(brCVModel.avgMetrics.mkString(","))
-      print(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getReplacement + ",")
-      print(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getSampleRatio + ",")
-      print(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getReplacementFeatures + ",")
-      println(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getSampleRatioFeatures)
+      println(brCVModel.bestModel.asInstanceOf[BoostingRegressionModel].getLearningRate)
       println(brCVModel.avgMetrics.min)
 
     }
 
     time {
       val paramGrid = new ParamGridBuilder()
-        .addGrid(rf.featureSubsetStrategy, Array("auto"))
-        .addGrid(rf.numTrees, Array(10))
-        .addGrid(rf.subsamplingRate, Array(0.3, 0.7, 1))
+        .addGrid(gbt.featureSubsetStrategy, Array("auto"))
+        .addGrid(gbt.subsamplingRate, Array(0.3,0.5,0.7))
         .build()
 
       val cv = new CrossValidator()
-        .setEstimator(rf)
-        .setEvaluator(new RegressionEvaluator().setLabelCol(rf.getLabelCol).setPredictionCol(rf.getPredictionCol).setMetricName("rmse"))
+        .setEstimator(gbt)
+        .setEvaluator(new RegressionEvaluator().setLabelCol(gbt.getLabelCol).setPredictionCol(gbt.getPredictionCol).setMetricName("rmse"))
         .setEstimatorParamMaps(paramGrid)
         .setNumFolds(5)
         .setParallelism(4)
@@ -63,7 +56,7 @@ class BaggingRegressorSuite extends FunSuite with DatasetSuiteBase {
       val cvModel = cv.fit(data)
 
       println(cvModel.avgMetrics.mkString(","))
-      println(cvModel.bestModel.asInstanceOf[RandomForestRegressionModel].getSubsamplingRate)
+      println(cvModel.bestModel.asInstanceOf[GBTRegressionModel].getSubsamplingRate)
       println(cvModel.avgMetrics.min)
     }
   }
