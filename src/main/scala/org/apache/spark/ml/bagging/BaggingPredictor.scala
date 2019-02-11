@@ -13,13 +13,14 @@ import org.apache.spark.util.random.XORShiftRandom
 import scala.util.Random
 
 trait BaggingPredictor {
-/*
+
+  /*
   val toArr: Any => Array[Double] = _.asInstanceOf[DenseVector].toArray
   val toArrUdf = udf(toArr)
 
   val toVector: Seq[Double] => Vector = seq => Vectors.dense(seq.toArray)
   val toVectorUdf = udf(toVector)
-*/
+   */
   //TODO: Try to find spark functions for Array.fill(array_repeat), find better than if expr for withoutReplacement
   def weightBag(withReplacement: Boolean, sampleRatio: Double, numberSamples: Int, seed: Long): Column = {
 
@@ -107,7 +108,6 @@ trait BaggingPredictor {
   def withSampledRows(weightsColName: String)(df: DataFrame): DataFrame = {
     df.withColumn("dummy", duplicateRow(col(weightsColName))).drop(col("dummy"))
   }
-
 
   def withSampledFeatures(featuresColName: String, indices: Array[Int])(df: DataFrame): DataFrame = {
     val slicer = udf { vec: Vector =>

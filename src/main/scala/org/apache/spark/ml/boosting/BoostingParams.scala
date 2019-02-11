@@ -33,7 +33,6 @@ trait BoostingParams extends PredictorParams with HasMaxIter with HasWeightCol w
   /** @group getParam */
   def getBaseLearner: PredictorVectorType = $(baseLearner)
 
-
   /**
     * param for ratio of rows sampled out of the dataset
     *
@@ -78,12 +77,12 @@ trait BoostingParams extends PredictorParams with HasMaxIter with HasWeightCol w
     new Param(this, "loss", "loss function, exponential by default")
 
   /** @group getParam */
-  def getLoss: Double =>Double = $(loss)
+  def getLoss: Double => Double = $(loss)
 
   setDefault(loss -> { error =>
     1 - FastMath.exp(-error)
   })
 
-  setDefault(maxIter   -> 10)
+  setDefault(maxIter -> 10)
 
 }

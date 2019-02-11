@@ -27,8 +27,8 @@ class BoostingRegressor(override val uid: String)
     with BaggingPredictor {
 
   def setBaseLearner(
-                      value: Predictor[_,_,_]
-                    ): this.type =
+    value: Predictor[_, _, _]
+  ): this.type =
     set(baseLearner, value.asInstanceOf[PredictorVectorType])
 
   /** @group setParam */
@@ -54,7 +54,7 @@ class BoostingRegressor(override val uid: String)
     setBaseLearner(
       regressor
         .set(regressor.labelCol, getLabelCol)
-        .set(regressor.featuresCol,getFeaturesCol)
+        .set(regressor.featuresCol, getFeaturesCol)
         .set(regressor.predictionCol, getPredictionCol)
     )
 

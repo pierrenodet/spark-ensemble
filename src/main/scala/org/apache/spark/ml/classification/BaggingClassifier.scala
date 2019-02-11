@@ -17,7 +17,7 @@ trait BaggingClassifierParams extends BaggingParams {
     val grouped = predictions.groupBy(x => x).mapValues(_.length).toSeq
     val max = grouped.map(_._2).max
     grouped.filter(_._2 == max).map(_._1).head
-  })/*
+  }) /*
   setDefault(reduce -> { predictions: Array[Double] =>
     predictions.sum / predictions.length
   })*/

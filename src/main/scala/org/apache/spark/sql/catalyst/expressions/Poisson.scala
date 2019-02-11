@@ -21,7 +21,10 @@ case class Poisson(left: Expression, right: Expression)
     case Literal(s, DoubleType)  => s.asInstanceOf[Double]
     case Literal(s, IntegerType) => s.asInstanceOf[Int].toDouble
     case Literal(s, LongType)    => s.asInstanceOf[Long].toDouble
-    case _                       => throw new AnalysisException(s"Input argument to $prettyName must be an float, double, integer, long or null literal.")
+    case _ =>
+      throw new AnalysisException(
+        s"Input argument to $prettyName must be an float, double, integer, long or null literal."
+      )
   }
 
   @transient protected lazy val seed: Long = right match {
