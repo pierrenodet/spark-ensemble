@@ -28,7 +28,9 @@ class BaggingRegressor(override val uid: String)
   // Parameters from BaggingRegressorParams:
 
   /** @group setParam */
-  def setBaseLearner(value: Predictor[Vector, _ <: Predictor[Vector, _, _], _ <: PredictionModel[Vector, _]]): this.type =
+  def setBaseLearner(
+    value: Predictor[Vector, _ <: Predictor[Vector, _, _], _ <: PredictionModel[Vector, _]]
+  ): this.type =
     set(baseLearner, value)
 
   /** @group setParam */
@@ -73,9 +75,14 @@ class BaggingRegressor(override val uid: String)
         .setLabelCol(getLabelCol)
         .asInstanceOf[Predictor[Vector, _ <: Predictor[Vector, _, _], _ <: PredictionModel[Vector, _]]]
     )
+    setBaseLearner(
+      getBaseLearner
+        .setPredictionCol(getPredictionCol)
+        .asInstanceOf[Predictor[Vector, _ <: Predictor[Vector, _, _], _ <: PredictionModel[Vector, _]]]
+    )
 
     instr.logPipelineStage(this)
-    //    instr.logDataset(dataset)
+    instr.logDataset(dataset)
     instr.logParams(this, maxIter, seed, parallelism)
 
     val withBag =

@@ -1,4 +1,4 @@
-name := "spark-bagging"
+name := "spark-ensemble"
 scalaVersion := "2.11.12"
 
 inThisBuild(
@@ -32,7 +32,6 @@ libraryDependencies += "org.scalacheck" %% "scalacheck" % ScalaCheckVersion % Te
 fork in Test := true
 parallelExecution in Test := false
 javaOptions ++= Seq("-Xms512M", "-Xmx2048M", "-XX:MaxPermSize=2048M", "-XX:+CMSClassUnloadingEnabled")
-testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest, "-oD")
 
 artifactName := { (sv: ScalaVersion, module: ModuleID, artifact: Artifact) =>
   artifact.name + "_" + sv.binary + "-" + SparkVersion + "_" + module.revision + "." + artifact.extension

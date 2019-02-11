@@ -17,9 +17,11 @@ case class Poisson(left: Expression, right: Expression)
   @transient protected var poisson: PoissonDistribution = _
 
   @transient protected lazy val lambda: Double = left match {
-    case Literal(s, FloatType)  => s.asInstanceOf[Float]
-    case Literal(s, DoubleType) => s.asInstanceOf[Double]
-    case _                      => throw new AnalysisException(s"Input argument to $prettyName must be an float, double or null literal.")
+    case Literal(s, FloatType)   => s.asInstanceOf[Float].toDouble
+    case Literal(s, DoubleType)  => s.asInstanceOf[Double]
+    case Literal(s, IntegerType) => s.asInstanceOf[Int].toDouble
+    case Literal(s, LongType)    => s.asInstanceOf[Long].toDouble
+    case _                       => throw new AnalysisException(s"Input argument to $prettyName must be an float, double, integer, long or null literal.")
   }
 
   @transient protected lazy val seed: Long = right match {
@@ -38,7 +40,7 @@ case class Poisson(left: Expression, right: Expression)
   override def dataType: DataType = IntegerType
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(FloatType, DoubleType), TypeCollection(IntegerType, LongType))
+    Seq(TypeCollection(FloatType, DoubleType, IntegerType, LongType), TypeCollection(IntegerType, LongType))
 
   def this(param: Expression) = this(param, Literal(Utils.random.nextLong(), LongType))
 
