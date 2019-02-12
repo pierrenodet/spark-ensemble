@@ -121,6 +121,7 @@ class StackingClassificationModel(
   }
 
   override def copy(extra: ParamMap): StackingClassificationModel = {
-    val copied = new StackingClassificationModel(uid,models,stack)
-    copyValues(copied,extra).setParent(parent)
-  }}
+    val copied = new StackingClassificationModel(uid, models, stack)
+    copyValues(copied, extra).setParent(parent)
+  }
+}

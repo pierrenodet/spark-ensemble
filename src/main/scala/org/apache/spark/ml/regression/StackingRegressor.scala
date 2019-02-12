@@ -120,7 +120,7 @@ class StackingRegressionModel(
   }
 
   override def copy(extra: ParamMap): StackingRegressionModel = {
-    val copied = new StackingRegressionModel(uid,models,stack)
-    copyValues(copied,extra).setParent(parent)
+    val copied = new StackingRegressionModel(uid, models, stack)
+    copyValues(copied, extra).setParent(parent)
   }
 }

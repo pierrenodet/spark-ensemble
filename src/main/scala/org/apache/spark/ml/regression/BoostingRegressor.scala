@@ -195,7 +195,7 @@ class BoostingRegressionModel(override val uid: String, models: Array[BoostedPre
   }
 
   override def copy(extra: ParamMap): BoostingRegressionModel = {
-    val copied = new BoostingRegressionModel(uid,models)
-    copyValues(copied,extra).setParent(parent)
+    val copied = new BoostingRegressionModel(uid, models)
+    copyValues(copied, extra).setParent(parent)
   }
 }
