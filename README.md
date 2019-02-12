@@ -13,7 +13,7 @@ Download the dependency from Sonatype
 **SBT**
 
 ```scala
-libraryDependencies += "com.github.pierrenodet" % "spark-ensemble" % "0.1.0"
+libraryDependencies += "com.github.pierrenodet" % "spark-ensemble" % "0.2.0"
 ```
 
 **Maven**
@@ -22,7 +22,7 @@ libraryDependencies += "com.github.pierrenodet" % "spark-ensemble" % "0.1.0"
 <dependency>
   <groupId>com.github.pierrenodet</groupId>
   <artifactId>spark-ensemble_2.11</artifactId>
-  <version>0.1.0</version>
+  <version>0.2.0</version>
 </dependency>
 ```
 
@@ -50,6 +50,51 @@ brPredicted.show()
 
 val re = new RegressionEvaluator().setLabelCol("medv").setMetricName("rmse")
 println(re.evaluate(brPredicted))
+```
+
+**Boosting**
+
+```scala
+val data = spark.read.option("header", "true").option("inferSchema", "true").csv("src/test/resources/data/bostonhousing/train.csv")
+
+val vectorAssembler = new VectorAssembler().setInputCols(train.columns.filter(x => !x.equals("ID") && !x.equals("medv")))).setOutputCol("features")
+
+val baseRegressor = new DecisionTreeRegressor()
+val boostingRegressor = new BoostingRegressor().setBaseLearner(baseRegressor).setFeaturesCol("features").setLabelCol("medv").setMaxIter(10).setLearningRate(0.4)
+
+val formatted = vectorAssembler.transform(data)
+val Array(train, validation) = formatted.randomSplit(Array(0.7, 0.3))
+
+val brModel = boostingRegressor.fit(train)
+
+val brPredicted = brModel.transform(validation)
+brPredicted.show()
+
+val re = new RegressionEvaluator().setLabelCol("medv").setMetricName("rmse")
+println(re.evaluate(brPredicted))
+```
+
+**Stacking**
+
+```scala
+val data = spark.read.option("header", "true").option("inferSchema", "true").csv("src/test/resources/data/bostonhousing/train.csv")
+
+val vectorAssembler = new VectorAssembler().setInputCols(train.columns.filter(x => !x.equals("ID") && !x.equals("medv")))).setOutputCol("features")
+
+val regressors = Array(new RandomForestRegressor(),new DecisionTreeRegressor())
+val stacker = new DecisionTreeRegressor()
+val stackingRegressor = new StackingRegressor().setStacker(stacker).setLearners(regressors).setFeaturesCol("features").setLabelCol("medv").setParallelism(4)
+
+val formatted = vectorAssembler.transform(data)
+val Array(train, validation) = formatted.randomSplit(Array(0.7, 0.3))
+
+val srModel = stackingRegressor.fit(train)
+
+val srPredicted = srModel.transform(validation)
+srPredicted.show()
+
+val re = new RegressionEvaluator().setLabelCol("medv").setMetricName("rmse")
+println(re.evaluate(srPredicted))
 ```
 
 ## Built With
