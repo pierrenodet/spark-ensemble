@@ -133,7 +133,10 @@ class BaggingClassificationModel(override val uid: String, models: Array[Patched
 
   override def predict(features: Vector): Double = getReduce(predictNormal(features, models))
 
-  override def copy(extra: ParamMap): BaggingClassificationModel = new BaggingClassificationModel(models)
+  override def copy(extra: ParamMap): BaggingClassificationModel = {
+    val copied = new BaggingClassificationModel(uid, models)
+    copyValues(copied, extra).setParent(parent)
+  }
 
   def getModels: Array[PredictionModel[Vector, _]] = models.map(_.getModel)
 
