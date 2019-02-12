@@ -1,6 +1,7 @@
 package org.apache.spark.ml.regression
 
 import org.apache.spark.ml.bagging.{BaggingParams, BaggingPredictionModel, BaggingPredictor, PatchedPredictionModel}
+import org.apache.spark.ml.classification.BaggingClassificationModel
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.util.Identifiable
@@ -134,8 +135,10 @@ class BaggingRegressionModel(override val uid: String, models: Array[PatchedPred
 
   override def predict(features: Vector): Double = getReduce(predictNormal(features, models))
 
-  override def copy(extra: ParamMap): BaggingRegressionModel = new BaggingRegressionModel(models)
-
+  override def copy(extra: ParamMap): BaggingRegressionModel = {
+    val copied = new BaggingRegressionModel(uid, models)
+    copyValues(copied, extra).setParent(parent)
+  }
   def getModels: Array[PredictionModel[Vector, _]] = models.map(_.getModel)
 
 }

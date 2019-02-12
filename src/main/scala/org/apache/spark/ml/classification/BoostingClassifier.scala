@@ -8,6 +8,7 @@ import org.apache.spark.ml.boosting.{BoostedPredictionModel, BoostingParams}
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.regression.StackingRegressionModel
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.rdd.RDD
@@ -197,7 +198,7 @@ class BoostingClassificationModel(
   def this(numClasses: Int, models: Array[BoostedPredictionModel]) =
     this(Identifiable.randomUID("BoostingRegressionModel"), numClasses, models)
 
-  def weightedPredictions(features: Vector, models: Array[BoostedPredictionModel], numClasses: Int): Vector = {
+  override protected def predictRaw(features: Vector): Vector =
     Vectors.fromBreeze(
       models
         .map(model => {
@@ -208,12 +209,10 @@ class BoostingClassificationModel(
         })
         .reduce(_ + _)
     )
+
+  override def copy(extra: ParamMap): BoostingClassificationModel = {
+    val copied = new BoostingClassificationModel(uid, numClasses, models)
+    copyValues(copied, extra).setParent(parent)
   }
-
-  override def copy(extra: ParamMap): BoostingClassificationModel = new BoostingClassificationModel(numClasses, models)
-
-  override protected def predictRaw(
-    features: Vector
-  ): Vector = weightedPredictions(features, models, numClasses)
 
 }
