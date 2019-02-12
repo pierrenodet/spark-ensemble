@@ -13,7 +13,7 @@ Download the dependency from Sonatype
 **SBT**
 
 ```scala
-libraryDependencies += "com.github.pierrenodet" % "spark-ensemble_2.11" % "0.2.0"
+libraryDependencies += "com.github.pierrenodet" % "spark-ensemble_2.11" % "0.3.0"
 ```
 
 **Maven**
@@ -22,7 +22,7 @@ libraryDependencies += "com.github.pierrenodet" % "spark-ensemble_2.11" % "0.2.0
 <dependency>
   <groupId>com.github.pierrenodet</groupId>
   <artifactId>spark-ensemble_2.11</artifactId>
-  <version>0.2.0</version>
+  <version>0.3.0</version>
 </dependency>
 ```
 
