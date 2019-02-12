@@ -45,8 +45,11 @@ class BoostingRegressor(override val uid: String)
 
   def this() = this(Identifiable.randomUID("BoostingRegressor"))
 
-  override def copy(extra: ParamMap): BoostingRegressor = defaultCopy(extra)
-
+  override def copy(extra: ParamMap): BoostingRegressor = {
+    val copied = new BoostingRegressor(uid)
+    copyValues(copied, extra)
+    copied.setBaseLearner(copied.getBaseLearner.copy(extra))
+  }
   override protected def train(dataset: Dataset[_]): BoostingRegressionModel = instrumented { instr =>
     val spark = dataset.sparkSession
 

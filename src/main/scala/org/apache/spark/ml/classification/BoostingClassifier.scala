@@ -8,7 +8,6 @@ import org.apache.spark.ml.boosting.{BoostedPredictionModel, BoostingParams}
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.regression.StackingRegressionModel
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.rdd.RDD
@@ -52,7 +51,11 @@ class BoostingClassifier(override val uid: String)
 
   def this() = this(Identifiable.randomUID("BoostingRegressor"))
 
-  override def copy(extra: ParamMap): BoostingClassifier = defaultCopy(extra)
+  override def copy(extra: ParamMap): BoostingClassifier = {
+    val copied = new BoostingClassifier(uid)
+    copyValues(copied, extra)
+    copied.setBaseLearner(copied.getBaseLearner.copy(extra))
+  }
 
   override protected def train(dataset: Dataset[_]): BoostingClassificationModel = instrumented { instr =>
     val spark = dataset.sparkSession

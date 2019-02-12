@@ -36,7 +36,12 @@ class StackingClassifier(override val uid: String)
 
   def this() = this(Identifiable.randomUID("StackingClassifier"))
 
-  override def copy(extra: ParamMap): StackingClassifier = defaultCopy(extra)
+  override def copy(extra: ParamMap): StackingClassifier = {
+    val copied = new StackingClassifier(uid)
+    copyValues(copied, extra)
+    copied.setLearners(copied.getLearners.map(_.copy(extra)))
+    copied.setStacker(copied.getStacker.copy(extra))
+  }
 
   override protected def train(dataset: Dataset[_]): StackingClassificationModel = instrumented { instr =>
     val spark = dataset.sparkSession

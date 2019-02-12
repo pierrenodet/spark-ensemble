@@ -1,20 +1,8 @@
 package org.apache.spark.ml.boosting
 import org.apache.commons.math3.util.FastMath
-import org.apache.spark.ml.classification.{ClassificationModel, Classifier}
-import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param.shared.{HasMaxIter, HasWeightCol}
-import org.apache.spark.ml.param.{DoubleParam, LongParam, Param}
-import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
-
-private[ml] trait PredictorVectorTypeTrait {
-
-  // scalastyle:off structural.type
-  type PredictorVectorType = Predictor[Vector, E, M] forSome {
-    type M <: PredictionModel[Vector, M]
-    type E <: Predictor[Vector, E, M]
-  }
-  // scalastyle:on structural.type
-}
+import org.apache.spark.ml.param.{DoubleParam, LongParam, Param, PredictorVectorTypeTrait}
 
 trait BoostingParams extends PredictorParams with HasMaxIter with HasWeightCol with PredictorVectorTypeTrait {
 
