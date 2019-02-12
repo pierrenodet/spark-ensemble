@@ -17,10 +17,7 @@ trait BaggingClassifierParams extends BaggingParams {
     val grouped = predictions.groupBy(x => x).mapValues(_.length).toSeq
     val max = grouped.map(_._2).max
     grouped.filter(_._2 == max).map(_._1).head
-  }) /*
-  setDefault(reduce -> { predictions: Array[Double] =>
-    predictions.sum / predictions.length
-  })*/
+  })
 }
 
 class BaggingClassifier(override val uid: String)
@@ -34,9 +31,9 @@ class BaggingClassifier(override val uid: String)
 
   /** @group setParam */
   def setBaseLearner(
-    value: Predictor[Vector, _ <: Predictor[Vector, _, _], _ <: PredictionModel[Vector, _]]
+    value: Predictor[_, _, _]
   ): this.type =
-    set(baseLearner, value)
+    set(baseLearner, value.asInstanceOf[PredictorVectorType])
 
   /** @group setParam */
   def setReplacement(value: Boolean): this.type = set(replacement, value)
@@ -64,23 +61,23 @@ class BaggingClassifier(override val uid: String)
     */
   def setParallelism(value: Int): this.type = set(parallelism, value)
 
-  override def copy(extra: ParamMap): BaggingClassifier = defaultCopy(extra)
+  override def copy(extra: ParamMap): BaggingClassifier = {
+    val copied = new BaggingClassifier(uid)
+    copyValues(copied, extra)
+    copied.setBaseLearner(copied.getBaseLearner.copy(extra))
+  }
 
   override protected def train(dataset: Dataset[_]): BaggingClassificationModel = instrumented { instr =>
-    //Pass some parameters automatically to baseLearner
+    val classifier = getBaseLearner
     setBaseLearner(
-      getBaseLearner
-        .setFeaturesCol(getFeaturesCol)
-        .asInstanceOf[Predictor[Vector, _ <: Predictor[Vector, _, _], _ <: PredictionModel[Vector, _]]]
-    )
-    setBaseLearner(
-      getBaseLearner
-        .setLabelCol(getLabelCol)
-        .asInstanceOf[Predictor[Vector, _ <: Predictor[Vector, _, _], _ <: PredictionModel[Vector, _]]]
+      classifier
+        .set(classifier.labelCol, getLabelCol)
+        .set(classifier.featuresCol, getFeaturesCol)
+        .set(classifier.predictionCol, getPredictionCol)
     )
 
     instr.logPipelineStage(this)
-    //    instr.logDataset(dataset)
+    instr.logDataset(dataset)
     instr.logParams(this, maxIter, seed, parallelism)
 
     val withBag =

@@ -14,7 +14,8 @@ class BaggingRegressorSuite extends FunSuite with DatasetSuiteBase {
     val test = spark.read.option("header", "true").option("inferSchema", "true").csv("src/test/resources/data/bostonhousing/test.csv")
 
     val vectorAssembler = new VectorAssembler().setInputCols(raw.columns.filter(x => !x.equals("ID") && !x.equals("medv"))).setOutputCol("features")
-    val br = new BaggingRegressor().setBaseLearner(new DecisionTreeRegressor()).setFeaturesCol("features").setLabelCol("medv").setMaxIter(10).setParallelism(4)
+    val bl = new DecisionTreeRegressor()
+    val br = new BaggingRegressor().setBaseLearner(bl).setFeaturesCol("features").setLabelCol("medv").setMaxIter(10).setParallelism(4)
     val rf = new RandomForestRegressor().setFeaturesCol("features").setLabelCol("medv").setNumTrees(10)
 
     val data = vectorAssembler.transform(raw)
@@ -22,10 +23,12 @@ class BaggingRegressorSuite extends FunSuite with DatasetSuiteBase {
 
     time {
       val brParamGrid = new ParamGridBuilder()
-        .addGrid(br.sampleRatioFeatures, Array(0.3,0.7,1))
+        .addGrid(br.sampleRatioFeatures, Array(0.7,1))
         .addGrid(br.replacementFeatures, Array(x = false))
-        .addGrid(br.replacement, Array(true, false))
-        .addGrid(br.sampleRatio, Array(0.3, 0.7, 1))
+        .addGrid(br.replacement, Array(x = true))
+        .addGrid(br.sampleRatio, Array(0.7, 1))
+        .addGrid(bl.maxDepth, Array(1,10))
+        .addGrid(bl.maxBins, Array(30,40))
         .build()
 
       val brCV = new CrossValidator()
@@ -41,7 +44,9 @@ class BaggingRegressorSuite extends FunSuite with DatasetSuiteBase {
       print(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getReplacement + ",")
       print(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getSampleRatio + ",")
       print(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getReplacementFeatures + ",")
-      println(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getSampleRatioFeatures)
+      print(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getSampleRatioFeatures + ",")
+      print(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getModels(0).asInstanceOf[DecisionTreeRegressionModel].getMaxDepth + ",")
+      println(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getModels(0).asInstanceOf[DecisionTreeRegressionModel].getMaxBins)
       println(brCVModel.avgMetrics.min)
 
     }

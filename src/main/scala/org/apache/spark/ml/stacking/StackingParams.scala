@@ -1,8 +1,7 @@
 package org.apache.spark.ml.stacking
 import org.apache.spark.ml.PredictorParams
-import org.apache.spark.ml.boosting.PredictorVectorTypeTrait
-import org.apache.spark.ml.param.shared.{HasParallelism, HasWeightCol}
-import org.apache.spark.ml.param.{LongParam, Param}
+import org.apache.spark.ml.param.shared.HasParallelism
+import org.apache.spark.ml.param.{LongParam, Param, PredictorVectorTypeTrait}
 
 trait StackingParams extends PredictorParams with HasParallelism with PredictorVectorTypeTrait {
 

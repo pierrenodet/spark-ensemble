@@ -5,22 +5,22 @@ import org.apache.spark.ml.param.shared.{HasMaxIter, HasParallelism}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
 
-trait BaggingParams extends PredictorParams with HasMaxIter with HasParallelism {
+trait BaggingParams extends PredictorParams with HasMaxIter with HasParallelism with PredictorVectorTypeTrait {
 
   /**
     * param for the estimator to be stacked with bagging
     *
     * @group param
     */
-  val baseLearner: Param[Predictor[Vector, _ <: Predictor[Vector, _, _], _ <: PredictionModel[Vector, _]]] =
-    new Param[Predictor[Vector, _ <: Predictor[Vector, _, _], _ <: PredictionModel[Vector, _]]](
+  val baseLearner: Param[PredictorVectorType] =
+    new Param[PredictorVectorType](
       this,
       "baseLearner",
       "base learner that will get stacked with bagging"
     )
 
   /** @group getParam */
-  def getBaseLearner: Predictor[Vector, _ <: Predictor[Vector, _, _], _ <: PredictionModel[Vector, _]] = $(baseLearner)
+  def getBaseLearner: PredictorVectorType = $(baseLearner)
 
   /**
     * param for whether samples are drawn with replacement

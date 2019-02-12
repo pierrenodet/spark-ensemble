@@ -1,6 +1,7 @@
 package org.apache.spark.ml.regression
 
 import org.apache.spark.ml.bagging.BaggingPredictor
+import org.apache.spark.ml.classification.StackingClassifier
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
@@ -35,8 +36,12 @@ class StackingRegressor(override val uid: String)
 
   def this() = this(Identifiable.randomUID("StackingRegressor"))
 
-  override def copy(extra: ParamMap): StackingRegressor = defaultCopy(extra)
-
+  override def copy(extra: ParamMap): StackingRegressor = {
+    val copied = new StackingRegressor(uid)
+    copyValues(copied, extra)
+    copied.setLearners(copied.getLearners.map(_.copy(extra)))
+    copied.setStacker(copied.getStacker.copy(extra))
+  }
   override protected def train(dataset: Dataset[_]): StackingRegressionModel = instrumented { instr =>
     val spark = dataset.sparkSession
 
