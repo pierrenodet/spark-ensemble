@@ -1,28 +1,26 @@
 package org.apache.spark.ml.regression
 
+import org.apache.hadoop.fs.Path
 import org.apache.spark.ml.bagging.{BaggingParams, BaggingPredictionModel, BaggingPredictor, PatchedPredictionModel}
-import org.apache.spark.ml.classification.{BaggingClassificationModel, BaggingClassifier}
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.ml.util.Instrumentation.instrumented
+import org.apache.spark.ml.util._
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.sql.Dataset
 import org.apache.spark.util.ThreadUtils
+import org.json4s.DefaultFormats
 
 import scala.concurrent.Future
 import scala.concurrent.duration.Duration
 
-trait BaggingRegressorParams extends BaggingParams {
-  setDefault(reduce -> { predictions: Array[Double] =>
-    predictions.sum / predictions.length
-  })
-}
+trait BaggingRegressorParams extends BaggingParams {}
 
 class BaggingRegressor(override val uid: String)
     extends Predictor[Vector, BaggingRegressor, BaggingRegressionModel]
     with BaggingRegressorParams
-    with BaggingPredictor {
+    with BaggingPredictor
+    with MLWritable {
 
   def this() = this(Identifiable.randomUID("BaggingRegressor"))
 
@@ -45,9 +43,6 @@ class BaggingRegressor(override val uid: String)
 
   /** @group setParam */
   def setSampleRatioFeatures(value: Double): this.type = set(sampleRatioFeatures, value)
-
-  /** @group setParam */
-  def setReduce(value: Array[Double] => Double): this.type = set(reduce, value)
 
   /** @group setParam */
   def setMaxIter(value: Int): this.type = set(maxIter, value)
@@ -115,23 +110,115 @@ class BaggingRegressor(override val uid: String)
     new BaggingRegressionModel(models.toArray)
 
   }
+
+  override def write: MLWriter = new BaggingRegressor.BaggingRegressorWriter(this)
+
 }
 
-class BaggingRegressionModel(override val uid: String, models: Array[PatchedPredictionModel])
+object BaggingRegressor extends MLReadable[BaggingRegressor] {
+
+  override def read: MLReader[BaggingRegressor] = new BaggingRegressorReader
+
+  override def load(path: String): BaggingRegressor = super.load(path)
+
+  private[BaggingRegressor] class BaggingRegressorWriter(instance: BaggingRegressor) extends MLWriter {
+
+    override protected def saveImpl(path: String): Unit = {
+      BaggingParams.saveImpl(path, instance, sc)
+    }
+
+  }
+
+  private class BaggingRegressorReader extends MLReader[BaggingRegressor] {
+
+    /** Checked against metadata when loading model */
+    private val className = classOf[BaggingRegressor].getName
+
+    override def load(path: String): BaggingRegressor = {
+      val (metadata, learner) = BaggingParams.loadImpl(path, sc, className)
+      val bc = new BaggingRegressor(metadata.uid)
+      metadata.getAndSetParams(bc)
+      bc.setBaseLearner(learner)
+    }
+  }
+
+}
+
+class BaggingRegressionModel(override val uid: String, val models: Array[PatchedPredictionModel])
     extends RegressionModel[Vector, BaggingRegressionModel]
     with BaggingRegressorParams
-    with BaggingPredictionModel {
+    with BaggingPredictionModel
+    with MLWritable {
 
   def this(models: Array[PatchedPredictionModel]) = this(Identifiable.randomUID("BaggingRegressionModel"), models)
 
   def this() = this(Array.empty)
 
-  override def predict(features: Vector): Double = getReduce(predictNormal(features, models))
+  override def predict(features: Vector): Double = {
+    val predictions = predictNormal(features, models)
+    predictions.sum / predictions.length
+  }
 
   override def copy(extra: ParamMap): BaggingRegressionModel = {
     val copied = new BaggingRegressionModel(uid, models)
     copyValues(copied, extra).setParent(parent)
   }
-  def getModels: Array[PredictionModel[Vector, _]] = models.map(_.getModel)
 
+  override def write: MLWriter = new BaggingRegressionModel.BaggingRegressionModelWriter(this)
+
+}
+
+object BaggingRegressionModel extends MLReadable[BaggingRegressionModel] {
+
+  override def read: MLReader[BaggingRegressionModel] = new BaggingRegressionModelReader
+
+  override def load(path: String): BaggingRegressionModel = super.load(path)
+
+  private[BaggingRegressionModel] class BaggingRegressionModelWriter(instance: BaggingRegressionModel)
+      extends MLWriter {
+
+    private case class Data(indices: Array[Int])
+
+    override protected def saveImpl(path: String): Unit = {
+      BaggingParams.saveImpl(path, instance, sc)
+      instance.models.map(_.model.asInstanceOf[MLWritable]).zipWithIndex.foreach {
+        case (model, idx) =>
+          val modelPath = new Path(path, s"model-$idx").toString
+          model.save(modelPath)
+      }
+      instance.models.zipWithIndex.foreach {
+        case (model, idx) =>
+          val data = Data(model.indices)
+          val dataPath = new Path(path, s"data-$idx").toString
+          sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      }
+
+    }
+  }
+
+  private class BaggingRegressionModelReader extends MLReader[BaggingRegressionModel] {
+
+    /** Checked against metadata when loading model */
+    private val className = classOf[BaggingRegressionModel].getName
+
+    override def load(path: String): BaggingRegressionModel = {
+      implicit val format: DefaultFormats = DefaultFormats
+      val (metadata, _) = BaggingParams.loadImpl(path, sc, className)
+      val numModels = metadata.getParamValue("maxIter").extract[Int]
+      val models = (0 until numModels).toArray.map { idx =>
+        val modelPath = new Path(path, s"model-$idx").toString
+        DefaultParamsReader.loadParamsInstance[PredictionModel[Vector, _]](modelPath, sc)
+      }
+      val indices = (0 until numModels).toArray.map { idx =>
+        val dataPath = new Path(path, s"data-$idx").toString
+        val data = sparkSession.read.parquet(dataPath).select("indices").head()
+        data.getAs[Seq[Int]](0).toArray
+      }
+      val bcModel = new BaggingRegressionModel(metadata.uid, indices.zip(models).map {
+        case (a, b) => new PatchedPredictionModel(a, b)
+      })
+      metadata.getAndSetParams(bcModel)
+      bcModel
+    }
+  }
 }

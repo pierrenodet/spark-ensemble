@@ -184,7 +184,7 @@ class BoostingClassifier(override val uid: String)
         getMaxIter
       )
 
-    val usefulModels = models.filter(_.getWeight > 0)
+    val usefulModels = models.filter(_.weight > 0)
 
     new BoostingClassificationModel(numClasses, usefulModels)
 
@@ -206,8 +206,8 @@ class BoostingClassificationModel(
       models
         .map(model => {
           val tmp = DenseVector.zeros[Double](numClasses)
-          tmp(model.getModel.predict(features).ceil.toInt) = 1.0
-          val res = model.getWeight * tmp
+          tmp(model.model.predict(features).ceil.toInt) = 1.0
+          val res = model.weight * tmp
           res
         })
         .reduce(_ + _)

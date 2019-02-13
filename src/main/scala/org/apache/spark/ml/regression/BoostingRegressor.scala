@@ -175,7 +175,7 @@ class BoostingRegressor(override val uid: String)
         getMaxIter
       )
 
-    val usefulModels = models.filter(_.getWeight > 0)
+    val usefulModels = models.filter(_.weight > 0)
 
     new BoostingRegressionModel(usefulModels)
 
@@ -193,7 +193,7 @@ class BoostingRegressionModel(override val uid: String, models: Array[BoostedPre
 
   def weightedPredictions(features: Vector, models: Array[BoostedPredictionModel]): Array[Double] = {
     models.map(model => {
-      model.getWeight * model.getModel.predict(features)
+      model.weight * model.model.predict(features)
     })
   }
 

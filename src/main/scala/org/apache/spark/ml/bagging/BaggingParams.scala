@@ -1,9 +1,14 @@
 package org.apache.spark.ml.bagging
 
-import org.apache.spark.ml.linalg.Vector
-import org.apache.spark.ml.param.shared.{HasMaxIter, HasParallelism}
+import org.apache.hadoop.fs.Path
+import org.apache.spark.SparkContext
+import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
+import org.apache.spark.ml.param.shared.{HasMaxIter, HasParallelism}
+import org.apache.spark.ml.util.{DefaultParamsReader, DefaultParamsWriter, MLWritable}
+import org.json4s.JObject
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
 
 trait BaggingParams extends PredictorParams with HasMaxIter with HasParallelism with PredictorVectorTypeTrait {
 
@@ -84,20 +89,45 @@ trait BaggingParams extends PredictorParams with HasMaxIter with HasParallelism 
 
   setDefault(seed -> System.nanoTime())
 
-  /**
-    * param for ratio of rows sampled out of the dataset
-    *
-    * @group param
-    */
-  val reduce: Param[Array[Double] => Double] =
-    new Param(this, "reduce", "function to reduce the predictions of the models")
-
-  /** @group getParam */
-  def getReduce: Array[Double] => Double = $(reduce)
-
-  //setDefault(reduce -> { predictions: Array[Double] => predictions.sum / predictions.length })
-
   setDefault(maxIter     -> 10)
   setDefault(parallelism -> 1)
+
+}
+
+object BaggingParams extends PredictorVectorTypeTrait {
+
+  def saveImpl(
+    path: String,
+    instance: BaggingParams,
+    sc: SparkContext,
+    extraMetadata: Option[JObject] = None
+  ): Unit = {
+
+    val params = instance.extractParamMap().toSeq
+    val jsonParams = render(
+      params
+        .filter { case ParamPair(p, v) => p.name != "baseLearner" }
+        .map { case ParamPair(p, v) => p.name -> parse(p.jsonEncode(v)) }
+        .toList
+    )
+
+    DefaultParamsWriter.saveMetadata(instance, path, sc, extraMetadata, Some(jsonParams))
+
+    val learnerPath = new Path(path, "learner").toString
+    instance.getBaseLearner.asInstanceOf[MLWritable].save(learnerPath)
+
+  }
+
+  def loadImpl(
+    path: String,
+    sc: SparkContext,
+    expectedClassName: String
+  ): (DefaultParamsReader.Metadata, PredictorVectorType) = {
+
+    val metadata = DefaultParamsReader.loadMetadata(path, sc, expectedClassName)
+    val learnerPath = new Path(path, "learner").toString
+    val learner = DefaultParamsReader.loadParamsInstance[PredictorVectorType](learnerPath, sc)
+    (metadata, learner)
+  }
 
 }
