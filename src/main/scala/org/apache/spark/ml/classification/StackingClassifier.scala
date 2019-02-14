@@ -22,14 +22,10 @@ class StackingClassifier(override val uid: String)
     with StackingParams
     with MLWritable {
 
-  def setLearners(
-    value: Array[Predictor[_, _, _]]
-  ): this.type =
+  def setLearners(value: Array[Predictor[_, _, _]]): this.type =
     set(learners, value.map(_.asInstanceOf[PredictorVectorType]))
 
-  def setStacker(
-    value: Predictor[_, _, _]
-  ): this.type =
+  def setStacker(value: Predictor[_, _, _]): this.type =
     set(stacker, value.asInstanceOf[PredictorVectorType])
 
   def setParallelism(value: Int): this.type = set(parallelism, value)
@@ -43,38 +39,35 @@ class StackingClassifier(override val uid: String)
     copied.setStacker(copied.getStacker.copy(extra))
   }
 
-  override protected def train(dataset: Dataset[_]): StackingClassificationModel = instrumented { instr =>
-    val spark = dataset.sparkSession
+  override protected def train(dataset: Dataset[_]): StackingClassificationModel = instrumented {
+    instr =>
+      val spark = dataset.sparkSession
 
-    setLearners(
-      getLearners.map(
-        learner =>
-          learner
-            .set(learner.labelCol, getLabelCol)
-            .set(learner.featuresCol, getFeaturesCol)
-            .set(learner.predictionCol, "prediction")
-      )
-    )
+      setLearners(
+        getLearners.map(
+          learner =>
+            learner
+              .set(learner.labelCol, getLabelCol)
+              .set(learner.featuresCol, getFeaturesCol)
+              .set(learner.predictionCol, "prediction")))
 
-    val tmp = getStacker
-    setStacker(
-      getStacker
-        .set(tmp.labelCol, "label")
-        .set(tmp.featuresCol, "features")
-        .set(tmp.predictionCol, getPredictionCol)
-    )
+      val tmp = getStacker
+      setStacker(
+        getStacker
+          .set(tmp.labelCol, "label")
+          .set(tmp.featuresCol, "features")
+          .set(tmp.predictionCol, getPredictionCol))
 
-    instr.logPipelineStage(this)
-    instr.logDataset(dataset)
-    instr.logParams(this, seed)
+      instr.logPipelineStage(this)
+      instr.logDataset(dataset)
+      instr.logParams(this, seed)
 
-    val df = dataset.toDF().cache()
+      val df = dataset.toDF().cache()
 
-    val learners = getLearners
-    val numLearners = learners.length
+      val learners = getLearners
+      val numLearners = learners.length
 
-    val futureModels = (0 until numLearners).map(
-      iter =>
+      val futureModels = (0 until numLearners).map(iter =>
         Future[PredictionModel[Vector, _]] {
 
           instr.logDebug(s"Start training for $iter learner")
@@ -85,27 +78,30 @@ class StackingClassifier(override val uid: String)
 
           model
 
-        }(getExecutionContext)
-    )
+        }(getExecutionContext))
 
-    val models = futureModels.map(f => ThreadUtils.awaitResult(f, Duration.Inf)).toArray
+      val models = futureModels.map(f => ThreadUtils.awaitResult(f, Duration.Inf)).toArray
 
-    val points: RDD[LabeledPoint] =
-      df.select(col($(labelCol)), col($(featuresCol))).rdd.map {
-        case Row(label: Double, features: Vector) =>
-          LabeledPoint(label, features)
-      }
+      val points: RDD[LabeledPoint] =
+        df.select(col($(labelCol)), col($(featuresCol))).rdd.map {
+          case Row(label: Double, features: Vector) =>
+            LabeledPoint(label, features)
+        }
 
-    val predictions =
-      points.map(point => LabeledPoint(point.label, Vectors.dense(models.map(model => model.predict(point.features)))))
+      val predictions =
+        points.map(
+          point =>
+            LabeledPoint(
+              point.label,
+              Vectors.dense(models.map(model => model.predict(point.features)))))
 
-    val predictionsDF = spark.createDataFrame(predictions)
+      val predictionsDF = spark.createDataFrame(predictions)
 
-    val stack = getStacker.fit(predictionsDF)
+      val stack = getStacker.fit(predictionsDF)
 
-    df.unpersist()
+      df.unpersist()
 
-    new StackingClassificationModel(models, stack)
+      new StackingClassificationModel(models, stack)
 
   }
 
@@ -119,7 +115,8 @@ object StackingClassifier extends MLReadable[StackingClassifier] {
 
   override def load(path: String): StackingClassifier = super.load(path)
 
-  private[StackingClassifier] class StackingClassifierWriter(instance: StackingClassifier) extends MLWriter {
+  private[StackingClassifier] class StackingClassifierWriter(instance: StackingClassifier)
+      extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
       StackingParams.saveImpl(path, instance, sc)
@@ -144,11 +141,12 @@ object StackingClassifier extends MLReadable[StackingClassifier] {
 }
 
 class StackingClassificationModel(
-  override val uid: String,
-  val models: Array[PredictionModel[Vector, _]],
-  val stack: PredictionModel[Vector, _]
-) extends PredictionModel[Vector, StackingClassificationModel]
-    with StackingParams with MLWritable {
+    override val uid: String,
+    val models: Array[PredictionModel[Vector, _]],
+    val stack: PredictionModel[Vector, _])
+    extends PredictionModel[Vector, StackingClassificationModel]
+    with StackingParams
+    with MLWritable {
 
   def this(models: Array[PredictionModel[Vector, _]], stack: PredictionModel[Vector, _]) =
     this(Identifiable.randomUID("StackingClassificationModel"), models, stack)
@@ -162,7 +160,8 @@ class StackingClassificationModel(
     copyValues(copied, extra).setParent(parent)
   }
 
-  override def write: MLWriter = new StackingClassificationModel.StackingClassificationModelWriter(this)
+  override def write: MLWriter =
+    new StackingClassificationModel.StackingClassificationModelWriter(this)
 
 }
 
@@ -172,8 +171,9 @@ object StackingClassificationModel extends MLReadable[StackingClassificationMode
 
   override def load(path: String): StackingClassificationModel = super.load(path)
 
-  private[StackingClassificationModel] class StackingClassificationModelWriter(instance: StackingClassificationModel)
-    extends MLWriter {
+  private[StackingClassificationModel] class StackingClassificationModelWriter(
+      instance: StackingClassificationModel)
+      extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
       StackingParams.saveImpl(path, instance, sc)
@@ -201,7 +201,8 @@ object StackingClassificationModel extends MLReadable[StackingClassificationMode
         DefaultParamsReader.loadParamsInstance[PredictionModel[Vector, _]](modelPath, sc)
       }
       val stackPath = new Path(path, "stack").toString
-      val stack = DefaultParamsReader.loadParamsInstance[PredictionModel[Vector, _]](stackPath, sc)
+      val stack =
+        DefaultParamsReader.loadParamsInstance[PredictionModel[Vector, _]](stackPath, sc)
       val scModel = new StackingClassificationModel(metadata.uid, models, stack)
       metadata.getAndSetParams(scModel)
       scModel

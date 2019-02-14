@@ -17,20 +17,21 @@ case class Poisson(left: Expression, right: Expression)
   @transient protected var poisson: PoissonDistribution = _
 
   @transient protected lazy val lambda: Double = left match {
-    case Literal(s, FloatType)   => s.asInstanceOf[Float].toDouble
-    case Literal(s, DoubleType)  => s.asInstanceOf[Double]
+    case Literal(s, FloatType) => s.asInstanceOf[Float].toDouble
+    case Literal(s, DoubleType) => s.asInstanceOf[Double]
     case Literal(s, IntegerType) => s.asInstanceOf[Int].toDouble
-    case Literal(s, LongType)    => s.asInstanceOf[Long].toDouble
+    case Literal(s, LongType) => s.asInstanceOf[Long].toDouble
     case _ =>
       throw new AnalysisException(
-        s"Input argument to $prettyName must be an float, double, integer, long or null literal."
-      )
+        s"Input argument to $prettyName must be an float, double, integer, long or null literal.")
   }
 
   @transient protected lazy val seed: Long = right match {
     case Literal(s, IntegerType) => s.asInstanceOf[Int]
-    case Literal(s, LongType)    => s.asInstanceOf[Long]
-    case _                       => throw new AnalysisException(s"Input argument to $prettyName must be an integer, long or null literal.")
+    case Literal(s, LongType) => s.asInstanceOf[Long]
+    case _ =>
+      throw new AnalysisException(
+        s"Input argument to $prettyName must be an integer, long or null literal.")
   }
 
   override protected def initializeInternal(partitionIndex: Int): Unit = {
@@ -43,7 +44,9 @@ case class Poisson(left: Expression, right: Expression)
   override def dataType: DataType = IntegerType
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(FloatType, DoubleType, IntegerType, LongType), TypeCollection(IntegerType, LongType))
+    Seq(
+      TypeCollection(FloatType, DoubleType, IntegerType, LongType),
+      TypeCollection(IntegerType, LongType))
 
   def this(param: Expression) = this(param, Literal(Utils.random.nextLong(), LongType))
 
@@ -69,8 +72,10 @@ object Poisson {
 
   def apply(lambda: Column, seed: Column): Poisson = Poisson(lambda.expr, seed.expr)
 
-  def apply(lambda: Double, seed: Long): Poisson = Poisson(Literal(lambda, DoubleType), Literal(seed, LongType))
+  def apply(lambda: Double, seed: Long): Poisson =
+    Poisson(Literal(lambda, DoubleType), Literal(seed, LongType))
 
-  def apply(lambda: Double, seed: Column): Poisson = Poisson(Literal(lambda, DoubleType), seed.expr)
+  def apply(lambda: Double, seed: Column): Poisson =
+    Poisson(Literal(lambda, DoubleType), seed.expr)
 
 }

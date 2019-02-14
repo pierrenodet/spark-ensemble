@@ -22,14 +22,10 @@ class StackingRegressor(override val uid: String)
     with StackingParams
     with MLWritable {
 
-  def setLearners(
-    value: Array[Predictor[_, _, _]]
-  ): this.type =
+  def setLearners(value: Array[Predictor[_, _, _]]): this.type =
     set(learners, value.map(_.asInstanceOf[PredictorVectorType]))
 
-  def setStacker(
-    value: Predictor[_, _, _]
-  ): this.type =
+  def setStacker(value: Predictor[_, _, _]): this.type =
     set(stacker, value.asInstanceOf[PredictorVectorType])
 
   def setParallelism(value: Int): this.type = set(parallelism, value)
@@ -42,38 +38,35 @@ class StackingRegressor(override val uid: String)
     copied.setLearners(copied.getLearners.map(_.copy(extra)))
     copied.setStacker(copied.getStacker.copy(extra))
   }
-  override protected def train(dataset: Dataset[_]): StackingRegressionModel = instrumented { instr =>
-    val spark = dataset.sparkSession
+  override protected def train(dataset: Dataset[_]): StackingRegressionModel = instrumented {
+    instr =>
+      val spark = dataset.sparkSession
 
-    setLearners(
-      getLearners.map(
-        learner =>
-          learner
-            .set(learner.labelCol, getLabelCol)
-            .set(learner.featuresCol, getFeaturesCol)
-            .set(learner.predictionCol, "prediction")
-      )
-    )
+      setLearners(
+        getLearners.map(
+          learner =>
+            learner
+              .set(learner.labelCol, getLabelCol)
+              .set(learner.featuresCol, getFeaturesCol)
+              .set(learner.predictionCol, "prediction")))
 
-    val tmp = getStacker
-    setStacker(
-      tmp
-        .set(tmp.labelCol, "label")
-        .set(tmp.featuresCol, "features")
-        .set(tmp.predictionCol, getPredictionCol)
-    )
+      val tmp = getStacker
+      setStacker(
+        tmp
+          .set(tmp.labelCol, "label")
+          .set(tmp.featuresCol, "features")
+          .set(tmp.predictionCol, getPredictionCol))
 
-    instr.logPipelineStage(this)
-    instr.logDataset(dataset)
-    instr.logParams(this, seed)
+      instr.logPipelineStage(this)
+      instr.logDataset(dataset)
+      instr.logParams(this, seed)
 
-    val df = dataset.toDF().cache()
+      val df = dataset.toDF().cache()
 
-    val learners = getLearners
-    val numLearners = learners.length
+      val learners = getLearners
+      val numLearners = learners.length
 
-    val futureModels = (0 until numLearners).map(
-      iter =>
+      val futureModels = (0 until numLearners).map(iter =>
         Future[PredictionModel[Vector, _]] {
 
           instr.logDebug(s"Start training for $iter learner")
@@ -84,27 +77,30 @@ class StackingRegressor(override val uid: String)
 
           model
 
-        }(getExecutionContext)
-    )
+        }(getExecutionContext))
 
-    val models = futureModels.map(f => ThreadUtils.awaitResult(f, Duration.Inf)).toArray
+      val models = futureModels.map(f => ThreadUtils.awaitResult(f, Duration.Inf)).toArray
 
-    val points: RDD[LabeledPoint] =
-      df.select(col($(labelCol)), col($(featuresCol))).rdd.map {
-        case Row(label: Double, features: Vector) =>
-          LabeledPoint(label, features)
-      }
+      val points: RDD[LabeledPoint] =
+        df.select(col($(labelCol)), col($(featuresCol))).rdd.map {
+          case Row(label: Double, features: Vector) =>
+            LabeledPoint(label, features)
+        }
 
-    val predictions =
-      points.map(point => LabeledPoint(point.label, Vectors.dense(models.map(model => model.predict(point.features)))))
+      val predictions =
+        points.map(
+          point =>
+            LabeledPoint(
+              point.label,
+              Vectors.dense(models.map(model => model.predict(point.features)))))
 
-    val predictionsDF = spark.createDataFrame(predictions)
+      val predictionsDF = spark.createDataFrame(predictions)
 
-    val stack = getStacker.fit(predictionsDF)
+      val stack = getStacker.fit(predictionsDF)
 
-    df.unpersist()
+      df.unpersist()
 
-    new StackingRegressionModel(models, stack)
+      new StackingRegressionModel(models, stack)
 
   }
 
@@ -118,7 +114,8 @@ object StackingRegressor extends MLReadable[StackingRegressor] {
 
   override def load(path: String): StackingRegressor = super.load(path)
 
-  private[StackingRegressor] class StackingRegressorWriter(instance: StackingRegressor) extends MLWriter {
+  private[StackingRegressor] class StackingRegressorWriter(instance: StackingRegressor)
+      extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
       StackingParams.saveImpl(path, instance, sc)
@@ -135,7 +132,7 @@ object StackingRegressor extends MLReadable[StackingRegressor] {
       val (metadata, learners, stacker) = StackingParams.loadImpl(path, sc, className)
       val sr = new StackingRegressor(metadata.uid)
       metadata.getAndSetParams(sr)
-      sr.setLearners(learners.map(_.asInstanceOf[Predictor[_,_,_]]))
+      sr.setLearners(learners.map(_.asInstanceOf[Predictor[_, _, _]]))
       sr.setStacker(stacker)
     }
   }
@@ -143,10 +140,10 @@ object StackingRegressor extends MLReadable[StackingRegressor] {
 }
 
 class StackingRegressionModel(
-  override val uid: String,
-  val models: Array[PredictionModel[Vector, _]],
-  val stack: PredictionModel[Vector, _]
-) extends PredictionModel[Vector, StackingRegressionModel]
+    override val uid: String,
+    val models: Array[PredictionModel[Vector, _]],
+    val stack: PredictionModel[Vector, _])
+    extends PredictionModel[Vector, StackingRegressionModel]
     with StackingParams
     with MLWritable
     with Serializable {
@@ -173,7 +170,8 @@ object StackingRegressionModel extends MLReadable[StackingRegressionModel] {
 
   override def load(path: String): StackingRegressionModel = super.load(path)
 
-  private[StackingRegressionModel] class StackingRegressionModelWriter(instance: StackingRegressionModel)
+  private[StackingRegressionModel] class StackingRegressionModelWriter(
+      instance: StackingRegressionModel)
       extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
@@ -202,7 +200,8 @@ object StackingRegressionModel extends MLReadable[StackingRegressionModel] {
         DefaultParamsReader.loadParamsInstance[PredictionModel[Vector, _]](modelPath, sc)
       }
       val stackPath = new Path(path, "stack").toString
-      val stack = DefaultParamsReader.loadParamsInstance[PredictionModel[Vector, _]](stackPath, sc)
+      val stack =
+        DefaultParamsReader.loadParamsInstance[PredictionModel[Vector, _]](stackPath, sc)
       val srModel = new StackingRegressionModel(metadata.uid, models, stack)
       metadata.getAndSetParams(srModel)
       srModel

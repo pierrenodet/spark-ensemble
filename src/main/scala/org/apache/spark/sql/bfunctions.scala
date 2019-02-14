@@ -12,6 +12,7 @@ object bfunctions {
 
   def poisson(lambda: Double, seed: Long) = Column(Poisson(lambda, seed))
 
-  def slicec(x: Column, start: Column, length: Column): Column = Column(Slice(x.expr, start.expr, length.expr))
+  def slicec(x: Column, start: Column, length: Column): Column =
+    Column(Slice(x.expr, start.expr, length.expr))
 
 }

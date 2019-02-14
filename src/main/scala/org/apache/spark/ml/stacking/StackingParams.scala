@@ -12,40 +12,32 @@ import org.json4s.jackson.JsonMethods._
 trait StackingParams extends PredictorParams with HasParallelism with PredictorVectorTypeTrait {
 
   /**
-    * param for the base learner to be stacked with boosting
-    *
-    * @group param
-    */
+   * param for the base learner to be stacked with boosting
+   *
+   * @group param
+   */
   val learners: Param[Array[PredictorVectorType]] =
-    new Param[Array[PredictorVectorType]](
-      this,
-      "learners",
-      "learners that will get stacked"
-    )
+    new Param[Array[PredictorVectorType]](this, "learners", "learners that will get stacked")
 
   /** @group getParam */
   def getLearners: Array[PredictorVectorType] = $(learners)
 
   /**
-    * param for the base learner to be stacked with boosting
-    *
-    * @group param
-    */
+   * param for the base learner to be stacked with boosting
+   *
+   * @group param
+   */
   val stacker: Param[PredictorVectorType] =
-    new Param[PredictorVectorType](
-      this,
-      "stacker",
-      "learner that will stack all the learners"
-    )
+    new Param[PredictorVectorType](this, "stacker", "learner that will stack all the learners")
 
   /** @group getParam */
   def getStacker: PredictorVectorType = $(stacker)
 
   /**
-    * param for ratio of rows sampled out of the dataset
-    *
-    * @group param
-    */
+   * param for ratio of rows sampled out of the dataset
+   *
+   * @group param
+   */
   val seed: Param[Long] = new LongParam(this, "seed", "seed for randomness")
 
   /** @group getParam */
@@ -58,19 +50,17 @@ trait StackingParams extends PredictorParams with HasParallelism with PredictorV
 object StackingParams extends PredictorVectorTypeTrait {
 
   def saveImpl(
-    path: String,
-    instance: StackingParams,
-    sc: SparkContext,
-    extraMetadata: Option[JObject] = None
-  ): Unit = {
+      path: String,
+      instance: StackingParams,
+      sc: SparkContext,
+      extraMetadata: Option[JObject] = None): Unit = {
 
     val params = instance.extractParamMap().toSeq
     val jsonParams = render(
       params
         .filter { case ParamPair(p, v) => p.name != "learners" && p.name != "stacker" }
         .map { case ParamPair(p, v) => p.name -> parse(p.jsonEncode(v)) }
-        .toList
-    )
+        .toList)
 
     DefaultParamsWriter.saveMetadata(instance, path, sc, extraMetadata, Some(jsonParams))
 
@@ -84,17 +74,19 @@ object StackingParams extends PredictorVectorTypeTrait {
 
   }
 
-  def loadImpl(
-    path: String,
-    sc: SparkContext,
-    expectedClassName: String
-  ): (DefaultParamsReader.Metadata, Array[PredictorVectorType], PredictorVectorType) = {
+  def loadImpl(path: String, sc: SparkContext, expectedClassName: String)
+    : (DefaultParamsReader.Metadata, Array[PredictorVectorType], PredictorVectorType) = {
 
     val metadata = DefaultParamsReader.loadMetadata(path, sc, expectedClassName)
     val pathFS = new Path(path)
     val fs = pathFS.getFileSystem(sc.hadoopConfiguration)
-    val learnersPath = fs.listStatus(pathFS).map(_.getPath).filter(_.getName.startsWith("learner-")).map(_.toString)
-    val learners = learnersPath.map(DefaultParamsReader.loadParamsInstance[PredictorVectorType](_, sc))
+    val learnersPath = fs
+      .listStatus(pathFS)
+      .map(_.getPath)
+      .filter(_.getName.startsWith("learner-"))
+      .map(_.toString)
+    val learners =
+      learnersPath.map(DefaultParamsReader.loadParamsInstance[PredictorVectorType](_, sc))
     val stackerPath = new Path(path, "stacker").toString
     val stacker = DefaultParamsReader.loadParamsInstance[PredictorVectorType](stackerPath, sc)
     (metadata, learners, stacker)

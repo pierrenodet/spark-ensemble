@@ -10,29 +10,33 @@ import org.json4s.JObject
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-trait BaggingParams extends PredictorParams with HasMaxIter with HasParallelism with PredictorVectorTypeTrait {
+trait BaggingParams
+    extends PredictorParams
+    with HasMaxIter
+    with HasParallelism
+    with PredictorVectorTypeTrait {
 
   /**
-    * param for the estimator to be stacked with bagging
-    *
-    * @group param
-    */
+   * param for the estimator to be stacked with bagging
+   *
+   * @group param
+   */
   val baseLearner: Param[PredictorVectorType] =
     new Param[PredictorVectorType](
       this,
       "baseLearner",
-      "base learner that will get stacked with bagging"
-    )
+      "base learner that will get stacked with bagging")
 
   /** @group getParam */
   def getBaseLearner: PredictorVectorType = $(baseLearner)
 
   /**
-    * param for whether samples are drawn with replacement
-    *
-    * @group param
-    */
-  val replacement: Param[Boolean] = new BooleanParam(this, "replacement", "whether samples are drawn with replacement")
+   * param for whether samples are drawn with replacement
+   *
+   * @group param
+   */
+  val replacement: Param[Boolean] =
+    new BooleanParam(this, "replacement", "whether samples are drawn with replacement")
 
   /** @group getParam */
   def getReplacement: Boolean = $(replacement)
@@ -40,11 +44,12 @@ trait BaggingParams extends PredictorParams with HasMaxIter with HasParallelism 
   setDefault(replacement -> false)
 
   /**
-    * param for ratio of rows sampled out of the dataset
-    *
-    * @group param
-    */
-  val sampleRatio: Param[Double] = new DoubleParam(this, "sampleRatio", "ratio of rows sampled out of the dataset")
+   * param for ratio of rows sampled out of the dataset
+   *
+   * @group param
+   */
+  val sampleRatio: Param[Double] =
+    new DoubleParam(this, "sampleRatio", "ratio of rows sampled out of the dataset")
 
   /** @group getParam */
   def getSampleRatio: Double = $(sampleRatio)
@@ -52,12 +57,15 @@ trait BaggingParams extends PredictorParams with HasMaxIter with HasParallelism 
   setDefault(sampleRatio -> 1)
 
   /**
-    * param for whether samples are drawn with replacement
-    *
-    * @group param
-    */
+   * param for whether samples are drawn with replacement
+   *
+   * @group param
+   */
   val replacementFeatures: Param[Boolean] =
-    new BooleanParam(this, "replacementFeautres", "whether features sampling are drawn with replacement")
+    new BooleanParam(
+      this,
+      "replacementFeautres",
+      "whether features sampling are drawn with replacement")
 
   /** @group getParam */
   def getReplacementFeatures: Boolean = $(replacementFeatures)
@@ -65,12 +73,15 @@ trait BaggingParams extends PredictorParams with HasMaxIter with HasParallelism 
   setDefault(replacementFeatures -> false)
 
   /**
-    * param for ratio of rows sampled out of the dataset
-    *
-    * @group param
-    */
+   * param for ratio of rows sampled out of the dataset
+   *
+   * @group param
+   */
   val sampleRatioFeatures: Param[Double] =
-    new DoubleParam(this, "sampleFeaturesNumber", "max number of features sampled out of the dataset")
+    new DoubleParam(
+      this,
+      "sampleFeaturesNumber",
+      "max number of features sampled out of the dataset")
 
   /** @group getParam */
   def getSampleRatioFeatures: Double = $(sampleRatioFeatures)
@@ -78,10 +89,10 @@ trait BaggingParams extends PredictorParams with HasMaxIter with HasParallelism 
   setDefault(sampleRatioFeatures -> 1)
 
   /**
-    * param for ratio of rows sampled out of the dataset
-    *
-    * @group param
-    */
+   * param for ratio of rows sampled out of the dataset
+   *
+   * @group param
+   */
   val seed: Param[Long] = new LongParam(this, "seed", "seed for randomness")
 
   /** @group getParam */
@@ -89,7 +100,7 @@ trait BaggingParams extends PredictorParams with HasMaxIter with HasParallelism 
 
   setDefault(seed -> System.nanoTime())
 
-  setDefault(maxIter     -> 10)
+  setDefault(maxIter -> 10)
   setDefault(parallelism -> 1)
 
 }
@@ -97,19 +108,17 @@ trait BaggingParams extends PredictorParams with HasMaxIter with HasParallelism 
 object BaggingParams extends PredictorVectorTypeTrait {
 
   def saveImpl(
-    path: String,
-    instance: BaggingParams,
-    sc: SparkContext,
-    extraMetadata: Option[JObject] = None
-  ): Unit = {
+      path: String,
+      instance: BaggingParams,
+      sc: SparkContext,
+      extraMetadata: Option[JObject] = None): Unit = {
 
     val params = instance.extractParamMap().toSeq
     val jsonParams = render(
       params
         .filter { case ParamPair(p, v) => p.name != "baseLearner" }
         .map { case ParamPair(p, v) => p.name -> parse(p.jsonEncode(v)) }
-        .toList
-    )
+        .toList)
 
     DefaultParamsWriter.saveMetadata(instance, path, sc, extraMetadata, Some(jsonParams))
 
@@ -119,10 +128,9 @@ object BaggingParams extends PredictorVectorTypeTrait {
   }
 
   def loadImpl(
-    path: String,
-    sc: SparkContext,
-    expectedClassName: String
-  ): (DefaultParamsReader.Metadata, PredictorVectorType) = {
+      path: String,
+      sc: SparkContext,
+      expectedClassName: String): (DefaultParamsReader.Metadata, PredictorVectorType) = {
 
     val metadata = DefaultParamsReader.loadMetadata(path, sc, expectedClassName)
     val learnerPath = new Path(path, "learner").toString
