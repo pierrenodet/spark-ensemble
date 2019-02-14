@@ -45,9 +45,17 @@ class BaggingRegressorSuite extends FunSuite with DatasetSuiteBase {
       print(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getSampleRatio + ",")
       print(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getReplacementFeatures + ",")
       print(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getSampleRatioFeatures + ",")
-      print(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getModels(0).asInstanceOf[DecisionTreeRegressionModel].getMaxDepth + ",")
-      println(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getModels(0).asInstanceOf[DecisionTreeRegressionModel].getMaxBins)
+      print(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].models(0).model.asInstanceOf[DecisionTreeRegressionModel].getMaxDepth + ",")
+      println(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].models(0).model.asInstanceOf[DecisionTreeRegressionModel].getMaxBins)
       println(brCVModel.avgMetrics.min)
+
+      val bm = brCVModel.bestModel.asInstanceOf[BaggingRegressionModel]
+      bm.models.foreach(model => println(model.model.explainParams()))
+      println(bm.explainParams())
+      bm.write.overwrite().save("/tmp/bonjour")
+      val loaded = BaggingRegressionModel.load("/tmp/bonjour")
+      println(loaded.explainParams())
+      loaded.models.foreach(model => println(model.model.explainParams()))
 
     }
 
