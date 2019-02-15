@@ -246,7 +246,7 @@ object BaggingRegressionModel extends MLReadable[BaggingRegressionModel] {
         case (subSpace, idx) =>
           val data = Data(subSpace)
           val dataPath = new Path(path, s"data-$idx").toString
-          sparkSession.createDataFrame(Seq(data)).repartition(1).write.text(dataPath)
+          sparkSession.createDataFrame(Seq(data)).repartition(1).write.json(dataPath)
       }
 
     }
@@ -267,7 +267,7 @@ object BaggingRegressionModel extends MLReadable[BaggingRegressionModel] {
       }
       val subSpaces = (0 until numModels).toArray.map { idx =>
         val dataPath = new Path(path, s"data-$idx").toString
-        val data = sparkSession.read.text(dataPath).select("indices").head()
+        val data = sparkSession.read.json(dataPath).select("indices").head()
         data.getAs[Seq[Int]](0).toArray
       }
       val bcModel = new BaggingRegressionModel(metadata.uid, subSpaces, models)

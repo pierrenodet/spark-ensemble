@@ -350,7 +350,7 @@ object BoostingRegressionModel extends MLReadable[BoostingRegressionModel] {
         case (weight, idx) =>
           val data = Data(weight)
           val dataPath = new Path(path, s"data-$idx").toString
-          sparkSession.createDataFrame(Seq(data)).repartition(1).write.text(dataPath)
+          sparkSession.createDataFrame(Seq(data)).repartition(1).write.json(dataPath)
       }
 
     }
@@ -371,7 +371,7 @@ object BoostingRegressionModel extends MLReadable[BoostingRegressionModel] {
       }
       val boostsData = (0 until numModels).toArray.map { idx =>
         val dataPath = new Path(path, s"data-$idx").toString
-        val data = sparkSession.read.text(dataPath).select("weight").head()
+        val data = sparkSession.read.json(dataPath).select("weight").head()
         data.getAs[Double](0)
       }
       val bcModel =
