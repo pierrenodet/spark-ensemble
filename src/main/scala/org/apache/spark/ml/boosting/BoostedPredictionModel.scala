@@ -1,9 +1,8 @@
 package org.apache.spark.ml.boosting
-import org.apache.spark.ml.PredictionModel
-import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.ensemble.EnsemblePredictionModelType
 
 class BoostedPredictionModel(
     val error: Double,
     val weight: Double,
-    val model: PredictionModel[Vector, _])
+    val model: EnsemblePredictionModelType)
     extends Serializable {}

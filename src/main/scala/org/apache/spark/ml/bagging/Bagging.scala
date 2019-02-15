@@ -12,7 +12,7 @@ import org.apache.spark.util.random.XORShiftRandom
 
 import scala.util.Random
 
-trait BaggingPredictor {
+object Bagging {
 
   /*
   val toArr: Any => Array[Double] = _.asInstanceOf[DenseVector].toArray

@@ -1,24 +1,93 @@
 package org.apache.spark.ml.classification
+import java.util.Locale
+
 import breeze.linalg.DenseVector
 import org.apache.commons.math3.distribution.PoissonDistribution
 import org.apache.commons.math3.util.FastMath
 import org.apache.hadoop.fs.Path
-import org.apache.spark.ml.bagging.{BaggingParams, BaggingPredictor}
-import org.apache.spark.ml.boosting.{BoostedPredictionModel, BoostingParams}
+import org.apache.spark.SparkContext
+import org.apache.spark.ml.Predictor
+import org.apache.spark.ml.boosting.BoostingParams
+import org.apache.spark.ml.ensemble.{EnsemblePredictionModelType, EnsemblePredictorType, HasBaseLearner}
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{Vector, Vectors}
-import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.{Param, ParamMap, ParamPair}
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.ml.util._
-import org.apache.spark.ml.{PredictionModel, Predictor, classification}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.functions.{col, lit}
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.storage.StorageLevel
-import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods.{parse, render}
+import org.json4s.{DefaultFormats, JObject}
 
-trait BoostingClassifierParams extends BoostingParams with ClassifierParams {}
+trait BoostingClassifierParams extends BoostingParams with ClassifierParams {
+
+  /**
+   * Loss function which Boosting tries to minimize. (case-insensitive)
+   * Supported: "exponential"
+   * (default = exponential)
+   *
+   * @group param
+   */
+  val loss: Param[String] =
+    new Param(
+      this,
+      "loss",
+      "loss function, exponential by default",
+      (value: String) =>
+        BoostingClassifierParams.supportedLossTypes.contains(value.toLowerCase(Locale.ROOT)))
+
+  /** @group getParam */
+  def getLoss: String = $(loss).toLowerCase(Locale.ROOT)
+
+  setDefault(loss -> "exponential")
+
+}
+
+object BoostingClassifierParams {
+
+  final val supportedLossTypes: Array[String] =
+    Array("exponential", "squared", "absolute").map(_.toLowerCase(Locale.ROOT))
+
+  def lossFunction(loss: String): Double => Double = loss match {
+    case "exponential" =>
+      error =>
+        1 - FastMath.exp(-error)
+    case _ => throw new RuntimeException(s"Boosting was given bad loss type: $loss")
+
+  }
+
+  def saveImpl(
+      instance: BoostingClassifierParams,
+      path: String,
+      sc: SparkContext,
+      extraMetadata: Option[JObject] = None): Unit = {
+
+    val params = instance.extractParamMap().toSeq
+    val jsonParams = render(
+      params
+        .filter { case ParamPair(p, _) => p.name != "baseLearner" }
+        .map { case ParamPair(p, v) => p.name -> parse(p.jsonEncode(v)) }
+        .toList)
+
+    DefaultParamsWriter.saveMetadata(instance, path, sc, extraMetadata, Some(jsonParams))
+    HasBaseLearner.saveImpl(instance, path, sc)
+
+  }
+
+  def loadImpl(
+      path: String,
+      sc: SparkContext,
+      expectedClassName: String): (DefaultParamsReader.Metadata, EnsemblePredictorType) = {
+
+    val metadata = DefaultParamsReader.loadMetadata(path, sc, expectedClassName)
+    val learner = HasBaseLearner.loadImpl(path, sc)
+    (metadata, learner)
+  }
+
+}
 
 class BoostingClassifier(override val uid: String)
     extends Classifier[Vector, BoostingClassifier, BoostingClassificationModel]
@@ -26,7 +95,7 @@ class BoostingClassifier(override val uid: String)
     with MLWritable {
 
   def setBaseLearner(value: Predictor[_, _, _]): this.type =
-    set(baseLearner, value.asInstanceOf[PredictorVectorType])
+    set(baseLearner, value.asInstanceOf[EnsemblePredictorType])
 
   /** @group setParam */
   def setMaxIter(value: Int): this.type = set(maxIter, value)
@@ -74,14 +143,14 @@ class BoostingClassifier(override val uid: String)
             Instance(label, weight, features)
         }
 
-      val lossFunction: Double => Double = BoostingParams.lossFunction(getLoss)
+      val lossFunction: Double => Double = BoostingClassifierParams.lossFunction(getLoss)
 
       def trainBooster(
-          baseLearner: PredictorVectorType,
-          learningRate: Double,
-          seed: Long,
-          loss: Double => Double)(
-          instances: RDD[Instance]): (BoostedPredictionModel, RDD[Instance]) = {
+                        baseLearner: EnsemblePredictorType,
+                        learningRate: Double,
+                        seed: Long,
+                        loss: Double => Double)(instances: RDD[Instance])
+      : (Option[(Double, EnsemblePredictionModelType)], RDD[Instance]) = {
 
         val labelColName = baseLearner.getLabelCol
         val featuresColName = baseLearner.getFeaturesCol
@@ -105,8 +174,7 @@ class BoostingClassifier(override val uid: String)
         }
 
         if (sampled.isEmpty) {
-          val bpm = new BoostedPredictionModel(1, 0, null)
-          return (bpm, instances)
+          return (None, instances)
         }
 
         val sampledDF =
@@ -125,8 +193,7 @@ class BoostingClassifier(override val uid: String)
             .reduce(_ + _)
 
         if (estimatorError <= 0) {
-          val bpm = new BoostedPredictionModel(0, 1, model)
-          return (bpm, instances)
+          return (Some(1, model), instances)
         }
 
         val beta = estimatorError / (1 - estimatorError)
@@ -136,19 +203,18 @@ class BoostingClassifier(override val uid: String)
           case (Instance(label, weight, features), error) =>
             Instance(label, weight * FastMath.exp(estimatorWeight * error), features)
         }
-        val bpm = new BoostedPredictionModel(estimatorError, estimatorWeight, model)
-        (bpm, instancesWithNewWeights)
+        (Some(estimatorWeight, model), instancesWithNewWeights)
 
       }
 
       def trainBoosters(
-          baseLearner: PredictorVectorType,
-          learningRate: Double,
-          seed: Long,
-          loss: Double => Double)(
-          instances: RDD[Instance],
-          acc: Array[BoostedPredictionModel],
-          iter: Int): Array[BoostedPredictionModel] = {
+                         baseLearner: EnsemblePredictorType,
+                         learningRate: Double,
+                         seed: Long,
+                         loss: Double => Double)(
+                         instances: RDD[Instance],
+                         acc: Array[Option[(Double, EnsemblePredictionModelType)]],
+                         iter: Int): Array[Option[(Double, EnsemblePredictionModelType)]] = {
 
         val persistedInput = if (instances.getStorageLevel == StorageLevel.NONE) {
           instances.persist(StorageLevel.MEMORY_AND_DISK)
@@ -177,7 +243,7 @@ class BoostingClassifier(override val uid: String)
           Array.empty,
           getMaxIter)
 
-      val usefulModels = models.filter(_.weight > 0)
+      val usefulModels = models.flatten
 
       new BoostingClassificationModel(numClasses, usefulModels)
 
@@ -197,7 +263,7 @@ object BoostingClassifier extends MLReadable[BoostingClassifier] {
       extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
-      BoostingParams.saveImpl(path, instance, sc)
+      BoostingClassifierParams.saveImpl(instance, path, sc)
     }
 
   }
@@ -208,7 +274,7 @@ object BoostingClassifier extends MLReadable[BoostingClassifier] {
     private val className = classOf[BoostingClassifier].getName
 
     override def load(path: String): BoostingClassifier = {
-      val (metadata, learner) = BoostingParams.loadImpl(path, sc, className)
+      val (metadata, learner) = BoostingClassifierParams.loadImpl(path, sc, className)
       val bc = new BoostingClassifier(metadata.uid)
       metadata.getAndSetParams(bc)
       bc.setBaseLearner(learner)
@@ -220,27 +286,37 @@ object BoostingClassifier extends MLReadable[BoostingClassifier] {
 class BoostingClassificationModel(
     override val uid: String,
     override val numClasses: Int,
-    val models: Array[BoostedPredictionModel])
+    val weights: Array[Double],
+    val models: Array[EnsemblePredictionModelType])
     extends ClassificationModel[Vector, BoostingClassificationModel]
     with BoostingClassifierParams
     with MLWritable {
 
-  def this(numClasses: Int, models: Array[BoostedPredictionModel]) =
-    this(Identifiable.randomUID("BoostingRegressionModel"), numClasses, models)
+  def this(numClasses: Int, weights: Array[Double], models: Array[EnsemblePredictionModelType]) =
+    this(Identifiable.randomUID("BoostingRegressionModel"), numClasses, weights, models)
+
+  def this(numClasses: Int, tuples: Array[(Double, EnsemblePredictionModelType)]) =
+    this(
+      Identifiable.randomUID("BoostingRegressionModel"),
+      numClasses,
+      tuples.unzip._1,
+      tuples.unzip._2)
 
   override protected def predictRaw(features: Vector): Vector =
     Vectors.fromBreeze(
-      models
-        .map(model => {
-          val tmp = DenseVector.zeros[Double](numClasses)
-          tmp(model.model.predict(features).ceil.toInt) = 1.0
-          val res = model.weight * tmp
-          res
-        })
+      weights
+        .zip(models)
+        .map {
+          case (weight, model) =>
+            val tmp = DenseVector.zeros[Double](numClasses)
+            tmp(model.predict(features).ceil.toInt) = 1.0
+            val res = weight * tmp
+            res
+        }
         .reduce(_ + _))
 
   override def copy(extra: ParamMap): BoostingClassificationModel = {
-    val copied = new BoostingClassificationModel(uid, numClasses, models)
+    val copied = new BoostingClassificationModel(uid, numClasses, weights, models)
     copyValues(copied, extra).setParent(parent)
   }
 
@@ -259,21 +335,21 @@ object BoostingClassificationModel extends MLReadable[BoostingClassificationMode
       instance: BoostingClassificationModel)
       extends MLWriter {
 
-    private case class Data(error: Double, weight: Double)
+    private case class Data(weight: Double)
 
     override protected def saveImpl(path: String): Unit = {
       val extraJson = "numClasses" -> instance.numClasses
-      BoostingParams.saveImpl(path, instance, sc, Some(extraJson))
-      instance.models.map(_.model.asInstanceOf[MLWritable]).zipWithIndex.foreach {
+      BoostingClassifierParams.saveImpl(instance, path, sc, Some(extraJson))
+      instance.models.map(_.asInstanceOf[MLWritable]).zipWithIndex.foreach {
         case (model, idx) =>
           val modelPath = new Path(path, s"model-$idx").toString
           model.save(modelPath)
       }
-      instance.models.zipWithIndex.foreach {
-        case (model, idx) =>
-          val data = Data(model.error, model.weight)
+      instance.weights.zipWithIndex.foreach {
+        case (weight, idx) =>
+          val data = Data(weight)
           val dataPath = new Path(path, s"data-$idx").toString
-          sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+          sparkSession.createDataFrame(Seq(data)).repartition(1).write.text(dataPath)
       }
 
     }
@@ -286,22 +362,20 @@ object BoostingClassificationModel extends MLReadable[BoostingClassificationMode
 
     override def load(path: String): BoostingClassificationModel = {
       implicit val format: DefaultFormats = DefaultFormats
-      val (metadata, _) = BoostingParams.loadImpl(path, sc, className)
+      val (metadata, _) = BoostingClassifierParams.loadImpl(path, sc, className)
       val numModels = metadata.getParamValue("maxIter").extract[Int]
       val models = (0 until numModels).toArray.map { idx =>
         val modelPath = new Path(path, s"model-$idx").toString
-        DefaultParamsReader.loadParamsInstance[PredictionModel[Vector, _]](modelPath, sc)
+        DefaultParamsReader.loadParamsInstance[EnsemblePredictionModelType](modelPath, sc)
       }
       val boostsData = (0 until numModels).toArray.map { idx =>
         val dataPath = new Path(path, s"data-$idx").toString
-        val data = sparkSession.read.parquet(dataPath).select("error", "weight").head()
-        (data.getAs[Double](0), data.getAs[Double](1))
+        val data = sparkSession.read.text(dataPath).select("weight").head()
+        data.getAs[Double](0)
       }
       val numClasses = (metadata.metadata \ "numClasses").extract[Int]
       val bcModel =
-        new BoostingClassificationModel(metadata.uid, numClasses, boostsData.zip(models).map {
-          case ((e, w), m) => new BoostedPredictionModel(e, w, m)
-        })
+        new BoostingClassificationModel(metadata.uid, numClasses, boostsData, models)
       metadata.getAndSetParams(bcModel)
       bcModel
     }
