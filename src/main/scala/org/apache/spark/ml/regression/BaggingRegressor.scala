@@ -257,7 +257,7 @@ object BaggingRegressionModel extends MLReadable[BaggingRegressionModel] {
       instance: BaggingRegressionModel)
       extends MLWriter {
 
-    private case class Data(subSpaces: Array[Int])
+    private case class Data(subSpace: Array[Int])
 
     override protected def saveImpl(path: String): Unit = {
       BaggingRegressorParams.saveImpl(instance, path, sc)
@@ -291,7 +291,7 @@ object BaggingRegressionModel extends MLReadable[BaggingRegressionModel] {
       }
       val subSpaces = (0 until numModels).toArray.map { idx =>
         val dataPath = new Path(path, s"data-$idx").toString
-        val data = sparkSession.read.json(dataPath).select("indices").head()
+        val data = sparkSession.read.json(dataPath).select("subSpace").head()
         data.getAs[Seq[Int]](0).toArray
       }
       val bcModel = new BaggingRegressionModel(metadata.uid, subSpaces, models)

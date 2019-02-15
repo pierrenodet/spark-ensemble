@@ -260,7 +260,7 @@ object BaggingClassificationModel extends MLReadable[BaggingClassificationModel]
       instance: BaggingClassificationModel)
       extends MLWriter {
 
-    private case class Data(subSpaces: Array[Int])
+    private case class Data(subSpace: Array[Int])
 
     override protected def saveImpl(path: String): Unit = {
       BaggingClassifierParams.saveImpl(instance, path, sc)
@@ -294,7 +294,7 @@ object BaggingClassificationModel extends MLReadable[BaggingClassificationModel]
       }
       val subSpaces = (0 until numModels).toArray.map { idx =>
         val dataPath = new Path(path, s"data-$idx").toString
-        val data = sparkSession.read.json(dataPath).select("indices").head()
+        val data = sparkSession.read.json(dataPath).select("subSpace").head()
         data.getAs[Seq[Int]](0).toArray
       }
       val bcModel = new BaggingClassificationModel(metadata.uid, subSpaces, models)
