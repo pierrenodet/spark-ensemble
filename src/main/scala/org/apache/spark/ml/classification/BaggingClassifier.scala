@@ -3,7 +3,7 @@ package org.apache.spark.ml.classification
 import org.apache.commons.math3.stat.StatUtils
 import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
-import org.apache.spark.ml.bagging.{Bagging, BaggingParams, BaggingPredictor}
+import org.apache.spark.ml.bagging.{Bagging, BaggingParams}
 import org.apache.spark.ml.ensemble.{EnsemblePredictionModelType, EnsemblePredictorType, HasBaseLearner}
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.{ParamMap, ParamPair}

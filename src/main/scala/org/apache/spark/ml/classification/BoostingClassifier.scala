@@ -8,7 +8,11 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.Predictor
 import org.apache.spark.ml.boosting.BoostingParams
-import org.apache.spark.ml.ensemble.{EnsemblePredictionModelType, EnsemblePredictorType, HasBaseLearner}
+import org.apache.spark.ml.ensemble.{
+  EnsemblePredictionModelType,
+  EnsemblePredictorType,
+  HasBaseLearner
+}
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.{Param, ParamMap, ParamPair}
@@ -146,11 +150,11 @@ class BoostingClassifier(override val uid: String)
       val lossFunction: Double => Double = BoostingClassifierParams.lossFunction(getLoss)
 
       def trainBooster(
-                        baseLearner: EnsemblePredictorType,
-                        learningRate: Double,
-                        seed: Long,
-                        loss: Double => Double)(instances: RDD[Instance])
-      : (Option[(Double, EnsemblePredictionModelType)], RDD[Instance]) = {
+          baseLearner: EnsemblePredictorType,
+          learningRate: Double,
+          seed: Long,
+          loss: Double => Double)(instances: RDD[Instance])
+        : (Option[(Double, EnsemblePredictionModelType)], RDD[Instance]) = {
 
         val labelColName = baseLearner.getLabelCol
         val featuresColName = baseLearner.getFeaturesCol
@@ -208,13 +212,13 @@ class BoostingClassifier(override val uid: String)
       }
 
       def trainBoosters(
-                         baseLearner: EnsemblePredictorType,
-                         learningRate: Double,
-                         seed: Long,
-                         loss: Double => Double)(
-                         instances: RDD[Instance],
-                         acc: Array[Option[(Double, EnsemblePredictionModelType)]],
-                         iter: Int): Array[Option[(Double, EnsemblePredictionModelType)]] = {
+          baseLearner: EnsemblePredictorType,
+          learningRate: Double,
+          seed: Long,
+          loss: Double => Double)(
+          instances: RDD[Instance],
+          acc: Array[Option[(Double, EnsemblePredictionModelType)]],
+          iter: Int): Array[Option[(Double, EnsemblePredictionModelType)]] = {
 
         val persistedInput = if (instances.getStorageLevel == StorageLevel.NONE) {
           instances.persist(StorageLevel.MEMORY_AND_DISK)

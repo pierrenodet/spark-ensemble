@@ -9,4 +9,3 @@ trait StackingParams
     with HasSeed
     with HasStacker
     with HasBaseLearners {}
-

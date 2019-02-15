@@ -1,5 +1,3 @@
 package org.apache.spark.ml.boosting
 
-object Boosting {
-
-}
+object Boosting {}

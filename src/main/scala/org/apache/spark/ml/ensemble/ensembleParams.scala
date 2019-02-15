@@ -8,10 +8,10 @@ import org.json4s.JObject
 trait HasLearningRate extends Params {
 
   /**
-    * param for the learning rate of the algorithm
-    *
-    * @group param
-    */
+   * param for the learning rate of the algorithm
+   *
+   * @group param
+   */
   val learningRate: Param[Double] =
     new DoubleParam(this, "learningRate", "learning rate for the estimator")
 
@@ -19,7 +19,6 @@ trait HasLearningRate extends Params {
   def getLearningRate: Double = $(learningRate)
 
   setDefault(learningRate -> 0.5)
-
 
 }
 
