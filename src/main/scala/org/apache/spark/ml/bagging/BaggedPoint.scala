@@ -24,45 +24,46 @@ import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
 
 /**
-  * Internal representation of a datapoint which belongs to several subsamples of the same dataset,
-  * particularly for bagging (e.g., for random forests).
-  *
-  * This holds one instance, as well as an array of weights which represent the (weighted)
-  * number of times which this instance appears in each subsamplingRate.
-  * E.g., (datum, [1, 0, 4]) indicates that there are 3 subsamples of the dataset and that
-  * this datum has 1 copy, 0 copies, and 4 copies in the 3 subsamples, respectively.
-  *
-  * @param datum  Data instance
-  * @param subsampleCounts  Number of samples of this instance in each subsampled dataset.
-  * @param sampleWeight The weight of this instance.
-  */
+ * Internal representation of a datapoint which belongs to several subsamples of the same dataset,
+ * particularly for bagging (e.g., for random forests).
+ *
+ * This holds one instance, as well as an array of weights which represent the (weighted)
+ * number of times which this instance appears in each subsamplingRate.
+ * E.g., (datum, [1, 0, 4]) indicates that there are 3 subsamples of the dataset and that
+ * this datum has 1 copy, 0 copies, and 4 copies in the 3 subsamples, respectively.
+ *
+ * @param datum  Data instance
+ * @param subsampleCounts  Number of samples of this instance in each subsampled dataset.
+ * @param sampleWeight The weight of this instance.
+ */
 private[spark] class BaggedPoint[Datum](
-                                         val datum: Datum,
-                                         val subsampleCounts: Array[Int],
-                                         val sampleWeight: Double = 1.0) extends Serializable
+    val datum: Datum,
+    val subsampleCounts: Array[Int],
+    val sampleWeight: Double = 1.0)
+    extends Serializable
 
 private[spark] object BaggedPoint {
 
   /**
-    * Convert an input dataset into its PatchedPoint representation,
-    * choosing subsamplingRate counts for each instance.
-    * Each subsamplingRate has the same number of instances as the original dataset,
-    * and is created by subsampling without replacement.
-    * @param input Input dataset.
-    * @param subsamplingRate Fraction of the training data used for learning decision tree.
-    * @param numSubsamples Number of subsamples of this RDD to take.
-    * @param withReplacement Sampling with/without replacement.
-    * @param extractSampleWeight A function to get the sample weight of each datum.
-    * @param seed Random seed.
-    * @return PatchedPoint dataset representation.
-    */
-  def convertToBaggedRDD[Datum] (
-                                  input: RDD[Datum],
-                                  subsamplingRate: Double,
-                                  numSubsamples: Int,
-                                  withReplacement: Boolean,
-                                  extractSampleWeight: (Datum => Double) = (_: Datum) => 1.0,
-                                  seed: Long = Utils.random.nextLong()): RDD[BaggedPoint[Datum]] = {
+   * Convert an input dataset into its PatchedPoint representation,
+   * choosing subsamplingRate counts for each instance.
+   * Each subsamplingRate has the same number of instances as the original dataset,
+   * and is created by subsampling without replacement.
+   * @param input Input dataset.
+   * @param subsamplingRate Fraction of the training data used for learning decision tree.
+   * @param numSubsamples Number of subsamples of this RDD to take.
+   * @param withReplacement Sampling with/without replacement.
+   * @param extractSampleWeight A function to get the sample weight of each datum.
+   * @param seed Random seed.
+   * @return PatchedPoint dataset representation.
+   */
+  def convertToBaggedRDD[Datum](
+      input: RDD[Datum],
+      subsamplingRate: Double,
+      numSubsamples: Int,
+      withReplacement: Boolean,
+      extractSampleWeight: (Datum => Double) = (_: Datum) => 1.0,
+      seed: Long = Utils.random.nextLong()): RDD[BaggedPoint[Datum]] = {
     // TODO: implement weighted bootstrapping
     if (withReplacement) {
       convertToBaggedRDDSamplingWithReplacement(input, subsamplingRate, numSubsamples, seed)
@@ -75,11 +76,11 @@ private[spark] object BaggedPoint {
     }
   }
 
-  private def convertToBaggedRDDSamplingWithoutReplacement[Datum] (
-                                                                    input: RDD[Datum],
-                                                                    subsamplingRate: Double,
-                                                                    numSubsamples: Int,
-                                                                    seed: Long): RDD[BaggedPoint[Datum]] = {
+  private def convertToBaggedRDDSamplingWithoutReplacement[Datum](
+      input: RDD[Datum],
+      subsamplingRate: Double,
+      numSubsamples: Int,
+      seed: Long): RDD[BaggedPoint[Datum]] = {
     input.mapPartitionsWithIndex { (partitionIndex, instances) =>
       // Use random seed = seed + partitionIndex + 1 to make generation reproducible.
       val rng = new XORShiftRandom
@@ -98,11 +99,11 @@ private[spark] object BaggedPoint {
     }
   }
 
-  private def convertToBaggedRDDSamplingWithReplacement[Datum] (
-                                                                 input: RDD[Datum],
-                                                                 subsample: Double,
-                                                                 numSubsamples: Int,
-                                                                 seed: Long): RDD[BaggedPoint[Datum]] = {
+  private def convertToBaggedRDDSamplingWithReplacement[Datum](
+      input: RDD[Datum],
+      subsample: Double,
+      numSubsamples: Int,
+      seed: Long): RDD[BaggedPoint[Datum]] = {
     input.mapPartitionsWithIndex { (partitionIndex, instances) =>
       // Use random seed = seed + partitionIndex + 1 to make generation reproducible.
       val poisson = new PoissonDistribution(subsample)
@@ -119,9 +120,9 @@ private[spark] object BaggedPoint {
     }
   }
 
-  private def convertToBaggedRDDWithoutSampling[Datum] (
-                                                         input: RDD[Datum],
-                                                         extractSampleWeight: (Datum => Double)): RDD[BaggedPoint[Datum]] = {
+  private def convertToBaggedRDDWithoutSampling[Datum](
+      input: RDD[Datum],
+      extractSampleWeight: (Datum => Double)): RDD[BaggedPoint[Datum]] = {
     input.map(datum => new BaggedPoint(datum, Array(1), extractSampleWeight(datum)))
   }
 }

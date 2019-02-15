@@ -12,10 +12,9 @@ object PatchedPoint {
   def convertToPatchedRDD(inputs: RDD[Instance], indices: Array[Int]): RDD[Instance] =
     inputs.map {
       case Instance(label, weight, features) =>
-        Instance(
-          label,
-          weight,
-          Vectors.dense(features.toArray.zip(indices).flatMap{case(f,i) => if(i==0) None else Some(f)}))
+        Instance(label, weight, Vectors.dense(features.toArray.zip(indices).flatMap {
+          case (f, i) => if (i == 0) None else Some(f)
+        }))
     }
 
   def patch(
