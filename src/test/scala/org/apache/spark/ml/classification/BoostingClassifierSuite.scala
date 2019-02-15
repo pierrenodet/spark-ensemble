@@ -38,7 +38,7 @@ class BoostingClassifierSuite extends FunSuite with DatasetSuiteBase {
 
       println(brCVModel.avgMetrics.mkString(","))
       println(brCVModel.bestModel.asInstanceOf[BoostingClassificationModel].getLearningRate)
-      println(brCVModel.avgMetrics.min)
+      println(brCVModel.avgMetrics.max)
     }
 
     time {
@@ -60,7 +60,7 @@ class BoostingClassifierSuite extends FunSuite with DatasetSuiteBase {
       println(cvModel.avgMetrics.mkString(","))
       print(cvModel.bestModel.asInstanceOf[RandomForestClassificationModel].getSubsamplingRate + ",")
       println(cvModel.bestModel.asInstanceOf[RandomForestClassificationModel].getMaxDepth)
-      println(cvModel.avgMetrics.min)
+      println(cvModel.avgMetrics.max)
     }
   }
 
