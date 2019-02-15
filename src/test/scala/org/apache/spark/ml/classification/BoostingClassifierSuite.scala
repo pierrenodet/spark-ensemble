@@ -22,7 +22,7 @@ class BoostingClassifierSuite extends FunSuite with DatasetSuiteBase {
 
     time {
       val brParamGrid = new ParamGridBuilder()
-    .addGrid(br.learningRate, Array(0.8,1.0))
+    .addGrid(br.learningRate, Array(0.3,0.8,1.0))
     .build()
 
       val brCV = new CrossValidator()

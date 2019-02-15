@@ -8,11 +8,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.Predictor
 import org.apache.spark.ml.boosting.BoostingParams
-import org.apache.spark.ml.ensemble.{
-  EnsemblePredictionModelType,
-  EnsemblePredictorType,
-  HasBaseLearner
-}
+import org.apache.spark.ml.ensemble.{EnsemblePredictionModelType, EnsemblePredictorType, HasBaseLearner}
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.{Param, ParamMap, ParamPair}
@@ -172,9 +168,14 @@ class BoostingClassifier(override val uid: String)
         }
         val sampled = normalized.zipWithIndex().flatMap {
           case (Instance(label, weight, features), i) =>
-            val poisson = new PoissonDistribution(weight * numLines)
-            poisson.reseedRandomGenerator(seed + i)
-            Iterator.fill(poisson.sample())(Instance(label, weight, features))
+            val trueWeight = if (weight.isNaN) 0 else weight
+            if (trueWeight * numLines == 0.0) {
+              Iterator.empty
+            } else {
+              val poisson = new PoissonDistribution(weight * numLines)
+              poisson.reseedRandomGenerator(seed + i)
+              Iterator.fill(poisson.sample())(Instance(label, weight, features))
+            }
         }
 
         if (sampled.isEmpty) {
@@ -203,7 +204,7 @@ class BoostingClassifier(override val uid: String)
         val beta = estimatorError / (1 - estimatorError)
         val estimatorWeight = learningRate * (FastMath.log(1 / beta) + FastMath.log(
           numClasses - 1))
-        val instancesWithNewWeights = instances.zip(errors).map {
+        val instancesWithNewWeights = normalized.zip(errors).map {
           case (Instance(label, weight, features), error) =>
             Instance(label, weight * FastMath.exp(estimatorWeight * error), features)
         }
