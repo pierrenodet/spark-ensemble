@@ -3,7 +3,7 @@ package org.apache.spark.ml.regression
 import java.util.Locale
 
 import org.apache.commons.math3.distribution.PoissonDistribution
-import org.apache.commons.math3.stat.StatUtils
+import org.apache.commons.math3.stat.descriptive.moment.Mean
 import org.apache.commons.math3.util.FastMath
 import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
@@ -158,12 +158,8 @@ class BoostingRegressor(override val uid: String)
         val labelColName = baseLearner.getLabelCol
         val featuresColName = baseLearner.getFeaturesCol
 
-        val agg =
-          instances.map { case Instance(_, weight, _) => (1, weight) }.reduce {
-            case ((i1, w1), (i2, w2)) => (i1 + i2, w1 + w2)
-          }
-        val numLines: Int = agg._1
-        val sumWeights: Double = agg._2
+        val numLines: Long = instances.count()
+        val sumWeights: Double = instances.map(_.weight).sum()
 
         val normalized = instances.map {
           case Instance(label, weight, features) =>
@@ -171,9 +167,14 @@ class BoostingRegressor(override val uid: String)
         }
         val sampled = normalized.zipWithIndex().flatMap {
           case (Instance(label, weight, features), i) =>
-            val poisson = new PoissonDistribution(weight * numLines)
-            poisson.reseedRandomGenerator(seed + i)
-            Iterator.fill(poisson.sample())(Instance(label, weight, features))
+            val trueWeight = if (weight.isNaN) 0 else weight
+            if (trueWeight * numLines == 0.0) {
+              Iterator.empty
+            } else {
+              val poisson = new PoissonDistribution(weight * numLines)
+              poisson.reseedRandomGenerator(seed + i)
+              Iterator.fill(poisson.sample())(Instance(label, weight, features))
+            }
         }
 
         if (sampled.isEmpty) {
@@ -186,27 +187,32 @@ class BoostingRegressor(override val uid: String)
 
         //TODO: Implement multiclass loss function
         val errors = instances.map {
-          case Instance(label, _, features) => if (model.predict(features) != label) 1 else 0
+          case Instance(label, _, features) => FastMath.abs(label - model.predict(features))
         }
+        val errorMax = errors.max()
         val estimatorError =
           normalized
             .map(_.weight)
             .zip(errors)
-            .map { case (weight, error) => weight * error }
-            .reduce(_ + _)
+            .map {
+              case (weight, error) =>
+                weight * BoostingRegressorParams.lossFunction(getLoss)(error / errorMax)
+            }
+            .sum()
 
         if (estimatorError <= 0) {
-          return (Some(1, model), instances)
+          (Some(1, model), instances)
+        } else if (estimatorError >= 0.5) {
+          (None, instances)
+        } else {
+          val beta = estimatorError / (1 - estimatorError)
+          val estimatorWeight = learningRate * FastMath.log(1 / beta)
+          val instancesWithNewWeights = normalized.zip(errors).map {
+            case (Instance(label, weight, features), error) =>
+              Instance(label, weight * FastMath.pow(beta, learningRate * (1 - error)), features)
+          }
+          (Some(estimatorWeight, model), instancesWithNewWeights)
         }
-
-        val beta = estimatorError / (1 - estimatorError)
-        val estimatorWeight = learningRate * FastMath.log(1 / beta)
-        val instancesWithNewWeights = instances.zip(errors).map {
-          case (Instance(label, weight, features), error) =>
-            Instance(label, weight * FastMath.exp(estimatorWeight * error), features)
-        }
-        (Some(estimatorWeight, model), instancesWithNewWeights)
-
       }
 
       def trainBoosters(
@@ -300,13 +306,7 @@ class BoostingRegressionModel(
     this(Identifiable.randomUID("BoostingRegressionModel"), tuples.unzip._1, tuples.unzip._2)
 
   override def predict(features: Vector): Double = {
-    StatUtils.mean(
-      weights
-        .zip(models)
-        .map {
-          case (weight, model) =>
-            weight * model.predict(features)
-        })
+    new Mean().evaluate(models.map(_.predict(features)), weights)
   }
 
   override def copy(extra: ParamMap): BoostingRegressionModel = {
