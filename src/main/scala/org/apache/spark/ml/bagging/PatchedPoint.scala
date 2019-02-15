@@ -23,7 +23,6 @@ object PatchedPoint {
       numFeatures: Int,
       withReplacement: Boolean,
       seed: Long = Utils.random.nextLong()): Array[Int] = {
-    // TODO: implement weighted bootstrapping
     if (withReplacement) {
       patchSamplingWithReplacement(subsamplingRate, numFeatures, seed)
     } else {

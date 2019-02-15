@@ -4,11 +4,10 @@ import org.apache.commons.math3.stat.StatUtils
 import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.Predictor
-import org.apache.spark.ml.bagging.{BaggedPoint, Bagging, BaggingParams, PatchedPoint}
-import org.apache.spark.ml.classification.BaggingClassificationModel
+import org.apache.spark.ml.bagging.{BaggedPoint, BaggingParams, PatchedPoint}
 import org.apache.spark.ml.ensemble.{EnsemblePredictionModelType, EnsemblePredictorType, HasBaseLearner}
 import org.apache.spark.ml.feature.Instance
-import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.ml.util._
