@@ -14,7 +14,7 @@ class StackingClassifierSuite extends FunSuite with DatasetSuiteBase {
 
     val vectorAssembler = new VectorAssembler().setInputCols(raw.columns.filter(x => !x.equals("class"))).setOutputCol("features")
     val stringIndexer = new StringIndexer().setInputCol("class").setOutputCol("label")
-    val sr = new StackingClassifier().setStacker(new DecisionTreeClassifier()).setLearners(Array(new DecisionTreeClassifier(),new RandomForestClassifier())).setParallelism(4)
+    val sr = new StackingClassifier().setStacker(new DecisionTreeClassifier()).setBaseLearners(Array(new DecisionTreeClassifier(),new RandomForestClassifier())).setParallelism(4)
     val rf = new RandomForestClassifier().setNumTrees(10)
 
     val data = stringIndexer.fit(raw).transform(vectorAssembler.transform(raw))

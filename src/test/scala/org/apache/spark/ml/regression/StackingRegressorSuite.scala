@@ -24,7 +24,7 @@ class StackingRegressorSuite extends FunSuite with DatasetSuiteBase {
       .setOutputCol("features")
     val sr = new StackingRegressor()
       .setStacker(new DecisionTreeRegressor())
-      .setLearners(Array(new DecisionTreeRegressor(), new RandomForestRegressor()))
+      .setBaseLearners(Array(new DecisionTreeRegressor(), new RandomForestRegressor()))
       .setFeaturesCol("features")
       .setLabelCol("medv")
       .setParallelism(4)

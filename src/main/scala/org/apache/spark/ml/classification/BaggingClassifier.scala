@@ -1,30 +1,62 @@
 package org.apache.spark.ml.classification
 
+import org.apache.commons.math3.stat.StatUtils
 import org.apache.hadoop.fs.Path
-import org.apache.spark.ml.bagging.{
-  BaggingParams,
-  BaggingPredictionModel,
-  BaggingPredictor,
-  PatchedPredictionModel
-}
-import org.apache.spark.ml.linalg.{Vector, Vectors}
-import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.SparkContext
+import org.apache.spark.ml.bagging.{Bagging, BaggingParams}
+import org.apache.spark.ml.ensemble.{EnsemblePredictionModelType, EnsemblePredictorType, HasBaseLearner}
+import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
+import org.apache.spark.ml.param.{ParamMap, ParamPair}
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.sql.Dataset
 import org.apache.spark.util.ThreadUtils
-import org.json4s.DefaultFormats
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
+import org.json4s.{DefaultFormats, JObject}
 
 import scala.concurrent.Future
 import scala.concurrent.duration.Duration
 
 trait BaggingClassifierParams extends BaggingParams with ClassifierParams {}
 
+object BaggingClassifierParams {
+
+  def saveImpl(
+      instance: BaggingClassifierParams,
+      path: String,
+      sc: SparkContext,
+      extraMetadata: Option[JObject] = None): Unit = {
+
+    val params = instance.extractParamMap().toSeq
+    val jsonParams = render(
+      params
+        .filter { case ParamPair(p, _) => p.name != "baseLearner" }
+        .map { case ParamPair(p, v) => p.name -> parse(p.jsonEncode(v)) }
+        .toList)
+
+    DefaultParamsWriter.saveMetadata(instance, path, sc, extraMetadata, Some(jsonParams))
+    HasBaseLearner.saveImpl(instance, path, sc)
+
+  }
+
+  def loadImpl(
+      path: String,
+      sc: SparkContext,
+      expectedClassName: String): (DefaultParamsReader.Metadata, EnsemblePredictorType) = {
+
+    val metadata = DefaultParamsReader.loadMetadata(path, sc, expectedClassName)
+    val learner = HasBaseLearner.loadImpl(path, sc)
+    (metadata, learner)
+
+  }
+
+}
+
 class BaggingClassifier(override val uid: String)
     extends Predictor[Vector, BaggingClassifier, BaggingClassificationModel]
     with BaggingClassifierParams
-    with BaggingPredictor
     with MLWritable {
 
   def this() = this(Identifiable.randomUID("BaggingRegressor"))
@@ -33,7 +65,7 @@ class BaggingClassifier(override val uid: String)
 
   /** @group setParam */
   def setBaseLearner(value: Predictor[_, _, _]): this.type =
-    set(baseLearner, value.asInstanceOf[PredictorVectorType])
+    set(baseLearner, value.asInstanceOf[EnsemblePredictorType])
 
   /** @group setParam */
   def setReplacement(value: Boolean): this.type = set(replacement, value)
@@ -81,23 +113,23 @@ class BaggingClassifier(override val uid: String)
         dataset
           .toDF()
           .transform(
-            withWeightedBag(getReplacement, getSampleRatio, getMaxIter, getSeed, "weightedBag"))
+            Bagging.withWeightedBag(getReplacement, getSampleRatio, getMaxIter, getSeed, "weightedBag"))
 
       val df = withBag.cache()
 
       val futureModels = (0 until getMaxIter).map(iter =>
-        Future[PatchedPredictionModel] {
+        Future[(Array[Int], EnsemblePredictionModelType)] {
 
-          val rowSampled = df.transform(withSampledRows("weightedBag", iter))
+          val rowSampled = df.transform(Bagging.withSampledRows("weightedBag", iter))
 
-          val numFeatures = getNumFeatures(df, getFeaturesCol)
+          val numFeatures = Bagging.getNumFeatures(df, getFeaturesCol)
           val featuresIndices: Array[Int] =
-            arrayIndicesSample(
+            Bagging.arrayIndicesSample(
               getReplacementFeatures,
               (getSampleRatioFeatures * numFeatures).toInt,
               getSeed + iter)((0 until numFeatures).toArray)
           val rowFeatureSampled =
-            rowSampled.transform(withSampledFeatures(getFeaturesCol, featuresIndices))
+            rowSampled.transform(Bagging.withSampledFeatures(getFeaturesCol, featuresIndices))
 
           instr.logDebug(
             s"Start training for $iter iteration on $rowFeatureSampled with $getBaseLearner")
@@ -107,7 +139,7 @@ class BaggingClassifier(override val uid: String)
           instr.logDebug(
             s"Training done for $iter iteration on $rowFeatureSampled with $getBaseLearner")
 
-          new PatchedPredictionModel(featuresIndices, model)
+          (featuresIndices, model)
 
         }(getExecutionContext))
 
@@ -133,7 +165,7 @@ object BaggingClassifier extends MLReadable[BaggingClassifier] {
       extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
-      BaggingParams.saveImpl(path, instance, sc)
+      BaggingClassifierParams.saveImpl(instance, path, sc)
     }
 
   }
@@ -144,7 +176,7 @@ object BaggingClassifier extends MLReadable[BaggingClassifier] {
     private val className = classOf[BaggingClassifier].getName
 
     override def load(path: String): BaggingClassifier = {
-      val (metadata, learner) = BaggingParams.loadImpl(path, sc, className)
+      val (metadata, learner) = BaggingClassifierParams.loadImpl(path, sc, className)
       val bc = new BaggingClassifier(metadata.uid)
       metadata.getAndSetParams(bc)
       bc.setBaseLearner(learner)
@@ -155,22 +187,30 @@ object BaggingClassifier extends MLReadable[BaggingClassifier] {
 
 class BaggingClassificationModel(
     override val uid: String,
-    val models: Array[PatchedPredictionModel])
+    val subSpaces: Array[Array[Int]],
+    val models: Array[EnsemblePredictionModelType])
     extends PredictionModel[Vector, BaggingClassificationModel]
     with BaggingClassifierParams
-    with BaggingPredictionModel
     with MLWritable {
 
-  def this(models: Array[PatchedPredictionModel]) =
-    this(Identifiable.randomUID("BaggingRegressionModel"), models)
+  def this(subSpaces: Array[Array[Int]], models: Array[EnsemblePredictionModelType]) =
+    this(Identifiable.randomUID("BaggingRegressionModel"), subSpaces, models)
 
-  def this() = this(Array.empty)
+  def this(tuples: Array[(Array[Int], EnsemblePredictionModelType)]) =
+    this(tuples.map(_._1), tuples.map(_._2))
 
   override def predict(features: Vector): Double =
-    Vectors.dense(predictNormal(features, models)).argmax
+    StatUtils.mode(subSpaces.zip(models).map {
+      case (subSpace, model) =>
+        val subFeatures = features match {
+          case features: DenseVector => Vectors.dense(subSpace.map(features.apply))
+          case features: SparseVector => features.slice(subSpace)
+        }
+        model.predict(subFeatures)
+    }).head
 
   override def copy(extra: ParamMap): BaggingClassificationModel = {
-    val copied = new BaggingClassificationModel(uid, models)
+    val copied = new BaggingClassificationModel(uid, subSpaces, models)
     copyValues(copied, extra).setParent(parent)
   }
 
@@ -189,20 +229,20 @@ object BaggingClassificationModel extends MLReadable[BaggingClassificationModel]
       instance: BaggingClassificationModel)
       extends MLWriter {
 
-    private case class Data(indices: Array[Int])
+    private case class Data(subSpaces: Array[Int])
 
     override protected def saveImpl(path: String): Unit = {
-      BaggingParams.saveImpl(path, instance, sc)
-      instance.models.map(_.model.asInstanceOf[MLWritable]).zipWithIndex.foreach {
+      BaggingClassifierParams.saveImpl(instance, path, sc)
+      instance.models.map(_.asInstanceOf[MLWritable]).zipWithIndex.foreach {
         case (model, idx) =>
           val modelPath = new Path(path, s"model-$idx").toString
           model.save(modelPath)
       }
-      instance.models.zipWithIndex.foreach {
-        case (model, idx) =>
-          val data = Data(model.indices)
+      instance.subSpaces.zipWithIndex.foreach {
+        case (subSpace, idx) =>
+          val data = Data(subSpace)
           val dataPath = new Path(path, s"data-$idx").toString
-          sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+          sparkSession.createDataFrame(Seq(data)).repartition(1).write.json(dataPath)
       }
 
     }
@@ -215,20 +255,18 @@ object BaggingClassificationModel extends MLReadable[BaggingClassificationModel]
 
     override def load(path: String): BaggingClassificationModel = {
       implicit val format: DefaultFormats = DefaultFormats
-      val (metadata, _) = BaggingParams.loadImpl(path, sc, className)
+      val (metadata, _) = BaggingClassifierParams.loadImpl(path, sc, className)
       val numModels = metadata.getParamValue("maxIter").extract[Int]
       val models = (0 until numModels).toArray.map { idx =>
         val modelPath = new Path(path, s"model-$idx").toString
-        DefaultParamsReader.loadParamsInstance[PredictionModel[Vector, _]](modelPath, sc)
+        DefaultParamsReader.loadParamsInstance[EnsemblePredictionModelType](modelPath, sc)
       }
-      val indices = (0 until numModels).toArray.map { idx =>
+      val subSpaces = (0 until numModels).toArray.map { idx =>
         val dataPath = new Path(path, s"data-$idx").toString
-        val data = sparkSession.read.parquet(dataPath).select("indices").head()
+        val data = sparkSession.read.json(dataPath).select("indices").head()
         data.getAs[Seq[Int]](0).toArray
       }
-      val bcModel = new BaggingClassificationModel(metadata.uid, indices.zip(models).map {
-        case (a, b) => new PatchedPredictionModel(a, b)
-      })
+      val bcModel = new BaggingClassificationModel(metadata.uid, subSpaces, models)
       metadata.getAndSetParams(bcModel)
       bcModel
     }
