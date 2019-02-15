@@ -4,17 +4,21 @@ import org.apache.commons.math3.stat.StatUtils
 import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.Predictor
-import org.apache.spark.ml.bagging.{Bagging, BaggingParams}
+import org.apache.spark.ml.bagging.{BaggedPoint, BaggingParams, PatchedPoint}
 import org.apache.spark.ml.ensemble.{
   EnsemblePredictionModelType,
   EnsemblePredictorType,
   HasBaseLearner
 }
-import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
+import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.Dataset
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.functions.{col, lit}
+import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ThreadUtils
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
@@ -72,6 +76,9 @@ class BaggingRegressor(override val uid: String)
     set(baseLearner, value.asInstanceOf[EnsemblePredictorType])
 
   /** @group setParam */
+  def setWeightCol(value: String): this.type = set(weightCol, value)
+
+  /** @group setParam */
   def setReplacement(value: Boolean): this.type = set(replacement, value)
 
   /** @group setParam */
@@ -113,45 +120,69 @@ class BaggingRegressor(override val uid: String)
       instr.logDataset(dataset)
       instr.logParams(this, maxIter, seed, parallelism)
 
-      val withBag =
-        dataset
-          .toDF()
-          .transform(Bagging
-            .withWeightedBag(getReplacement, getSampleRatio, getMaxIter, getSeed, "weightedBag"))
+      val spark = dataset.sparkSession
 
-      val df = withBag.cache()
+      val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
+      if (!isDefined(weightCol) || $(weightCol).isEmpty) setWeightCol("weight")
+
+      val input: RDD[Instance] =
+        dataset
+          .select(col($(labelCol)), w, col($(featuresCol)))
+          .rdd
+          .map {
+            case Row(label: Double, weight: Double, features: Vector) =>
+              Instance(label, weight, features)
+          }
+          .persist(StorageLevel.MEMORY_AND_DISK)
+
+      val numFeatures = input.first().features.size
+
+      val baggedInput = BaggedPoint
+        .convertToBaggedRDD(
+          input,
+          getSampleRatio,
+          getMaxIter,
+          getReplacement,
+          (instance: Instance) => instance.weight,
+          getSeed)
 
       val futureModels = (0 until getMaxIter).map(iter =>
-        Future[(Array[Int], EnsemblePredictionModelType)] {
+        Future[Option[(Array[Int], EnsemblePredictionModelType)]] {
 
-          val rowSampled = df.transform(Bagging.withSampledRows("weightedBag", iter))
+          val sampled =
+            baggedInput.flatMap(bi => Iterator.fill(bi.subsampleCounts(iter))(bi.datum))
 
-          val numFeatures = Bagging.getNumFeatures(df, getFeaturesCol)
-          val featuresIndices: Array[Int] =
-            Bagging.arrayIndicesSample(
-              getReplacementFeatures,
-              (getSampleRatioFeatures * numFeatures).toInt,
-              getSeed + iter)((0 until numFeatures).toArray)
-          val rowFeatureSampled =
-            rowSampled.transform(Bagging.withSampledFeatures(getFeaturesCol, featuresIndices))
+          val patch =
+            PatchedPoint
+              .patch(getSampleRatioFeatures, numFeatures, getReplacementFeatures, getSeed + iter)
 
-          instr.logDebug(
-            s"Start training for $iter iteration on $rowFeatureSampled with $getBaseLearner")
+          if (patch sameElements Array.fill(numFeatures)(0.0)) {
 
-          val model = getBaseLearner.fit(rowFeatureSampled)
+            //Nothing to learn as no features have been chosen
+            None
 
-          instr.logDebug(
-            s"Training done for $iter iteration on $rowFeatureSampled with $getBaseLearner")
+          } else {
 
-          (featuresIndices, model)
+            val subspaced = PatchedPoint.convertToPatchedRDD(sampled, patch)
+
+            val df = spark.createDataFrame(subspaced)
+            instr.logDebug(s"Start training for $iter iteration on $df with $getBaseLearner")
+
+            val model = getBaseLearner.fit(df)
+
+            instr.logDebug(s"Training done for $iter iteration on $df with $getBaseLearner")
+
+            Some(patch, model)
+
+          }
 
         }(getExecutionContext))
 
       val models = futureModels.map(f => ThreadUtils.awaitResult(f, Duration.Inf))
 
-      df.unpersist()
+      input.unpersist()
 
-      new BaggingRegressionModel(models.toArray)
+      new BaggingRegressionModel(models.flatten.toArray)
 
   }
 
@@ -206,10 +237,10 @@ class BaggingRegressionModel(
   override def predict(features: Vector): Double = {
     StatUtils.mean(subSpaces.zip(models).map {
       case (subSpace, model) =>
-        val subFeatures = features match {
-          case features: DenseVector => Vectors.dense(subSpace.map(features.apply))
-          case features: SparseVector => features.slice(subSpace)
-        }
+        val subFeatures =
+          Vectors.dense(features.toArray.zip(subSpace).flatMap {
+            case (f, i) => if (i == 0) None else Some(f)
+          })
         model.predict(subFeatures)
     })
   }

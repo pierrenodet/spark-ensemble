@@ -34,7 +34,7 @@ class StackingClassifierSuite extends FunSuite with DatasetSuiteBase {
       val srCVModel = srCV.fit(data)
 
       println(srCVModel.avgMetrics.mkString(","))
-      println(srCVModel.avgMetrics.min)
+      println(srCVModel.avgMetrics.max)
 
     }
 
@@ -53,7 +53,7 @@ class StackingClassifierSuite extends FunSuite with DatasetSuiteBase {
 
       println(cvModel.avgMetrics.mkString(","))
       println(cvModel.bestModel.asInstanceOf[RandomForestClassificationModel].getSubsamplingRate)
-      println(cvModel.avgMetrics.min)
+      println(cvModel.avgMetrics.max)
     }
   }
 

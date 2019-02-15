@@ -8,7 +8,7 @@ import org.apache.commons.math3.util.FastMath
 import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.Predictor
-import org.apache.spark.ml.boosting.{BoostedPredictionModel, BoostingParams}
+import org.apache.spark.ml.boosting.BoostingParams
 import org.apache.spark.ml.classification.ClassifierParams
 import org.apache.spark.ml.ensemble.{
   EnsemblePredictionModelType,
@@ -307,14 +307,6 @@ class BoostingRegressionModel(
           case (weight, model) =>
             weight * model.predict(features)
         })
-  }
-
-  def weightedPredictions(
-      features: Vector,
-      models: Array[BoostedPredictionModel]): Array[Double] = {
-    models.map(model => {
-      model.weight * model.model.predict(features)
-    })
   }
 
   override def copy(extra: ParamMap): BoostingRegressionModel = {

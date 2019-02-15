@@ -42,13 +42,12 @@ class BaggingClassifierSuite extends FunSuite with DatasetSuiteBase {
       print(brCVModel.bestModel.asInstanceOf[BaggingClassificationModel].getSampleRatio + ",")
       print(brCVModel.bestModel.asInstanceOf[BaggingClassificationModel].getReplacementFeatures + ",")
       println(brCVModel.bestModel.asInstanceOf[BaggingClassificationModel].getSampleRatioFeatures)
-      println(brCVModel.avgMetrics.min)
+      println(brCVModel.avgMetrics.max)
 
     }
 
     time {
       val paramGrid = new ParamGridBuilder()
-        .addGrid(rf.featureSubsetStrategy, Array("auto"))
         .addGrid(rf.subsamplingRate, Array(0.3, 0.7, 1))
         .build()
 
@@ -63,7 +62,7 @@ class BaggingClassifierSuite extends FunSuite with DatasetSuiteBase {
 
       println(cvModel.avgMetrics.mkString(","))
       println(cvModel.bestModel.asInstanceOf[RandomForestClassificationModel].getSubsamplingRate)
-      println(cvModel.avgMetrics.min)
+      println(cvModel.avgMetrics.max)
     }
   }
 
