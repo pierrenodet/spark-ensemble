@@ -109,7 +109,6 @@ class BaggingRegressor(override val uid: String)
 
   override protected def train(dataset: Dataset[_]): BaggingRegressionModel = instrumented {
     instr =>
-
       instr.logPipelineStage(this)
       instr.logDataset(dataset)
       instr.logParams(this, maxIter, seed, parallelism)

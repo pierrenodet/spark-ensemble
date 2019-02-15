@@ -10,7 +10,11 @@ import org.apache.spark.SparkContext
 import org.apache.spark.ml.Predictor
 import org.apache.spark.ml.boosting.BoostingParams
 import org.apache.spark.ml.classification.ClassifierParams
-import org.apache.spark.ml.ensemble.{EnsemblePredictionModelType, EnsemblePredictorType, HasBaseLearner}
+import org.apache.spark.ml.ensemble.{
+  EnsemblePredictionModelType,
+  EnsemblePredictorType,
+  HasBaseLearner
+}
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.{Param, ParamMap, ParamPair}
@@ -302,7 +306,7 @@ class BoostingRegressionModel(
     this(Identifiable.randomUID("BoostingRegressionModel"), tuples.unzip._1, tuples.unzip._2)
 
   override def predict(features: Vector): Double = {
-    new Mean().evaluate(models.map(_.predict(features)),weights)
+    new Mean().evaluate(models.map(_.predict(features)), weights)
   }
 
   override def copy(extra: ParamMap): BoostingRegressionModel = {
