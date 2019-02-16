@@ -8,12 +8,12 @@ Library of Meta-Estimators à la scikit-learn for Ensemble Learning for Apache S
 
 ## Setup
 
-Download the dependency from Sonatype
+Download the dependency from Maven Central
 
 **SBT**
 
 ```scala
-libraryDependencies += "com.github.pierrenodet" % "spark-ensemble_2.11" % "0.3.0"
+libraryDependencies += "com.github.pierrenodet" % "spark-ensemble_2.11" % "0.4.0"
 ```
 
 **Maven**
@@ -22,86 +22,69 @@ libraryDependencies += "com.github.pierrenodet" % "spark-ensemble_2.11" % "0.3.0
 <dependency>
   <groupId>com.github.pierrenodet</groupId>
   <artifactId>spark-ensemble_2.11</artifactId>
-  <version>0.3.0</version>
+  <version>0.4.0</version>
 </dependency>
 ```
 
+## What's inside
+
+This Spark ML library contains the following algorithms for ensemble learning :
+
+ * [Bagging and Random Subspaces](https://pdfs.semanticscholar.org/d38f/979ad85d59fc93058279010efc73a24a712c.pdf)
+ * [Boosting R2](https://pdfs.semanticscholar.org/8d49/e2dedb817f2c3330e74b63c5fc86d2399ce3.pdf)
+ * [Boosting SAMME](https://web.stanford.edu/~hastie/Papers/samme.pdf)
+ * [Stacking](https://en.wikipedia.org/wiki/Ensemble_learning#Stacking)
+
 ## How to use
 
-**Bagging**
+**Loading Features**
 
 ```scala
-val data = spark.read.option("header", "true").option("inferSchema", "true").csv("src/test/resources/data/bostonhousing/train.csv")
+val raw = spark.read.option("header", "true").option("inferSchema", "true").csv("src/test/resources/data/iris/train.csv")
 
-val vectorAssembler = new VectorAssembler().setInputCols(train.columns.filter(x => !x.equals("ID") && !x.equals("medv")))).setOutputCol("features")
+val vectorAssembler = new VectorAssembler()
+.setInputCols(raw.columns.filter(x => !x.equals("class"))).
+setOutputCol("features")
 
-val baseRegressor = new DecisionTreeRegressor()
-val baggingRegressor = new BaggingRegressor().setBaseLearner(baseRegressor).setFeaturesCol("features").setLabelCol("medv").setMaxIter(100).setParallelism(4)
-
-val formatted = vectorAssembler.transform(data)
-val Array(train, validation) = formatted.randomSplit(Array(0.7, 0.3))
-
-val brModel = baggingRegressor.fit(train)
-
-brModel.getModels
-
-val brPredicted = brModel.transform(validation)
-brPredicted.show()
-
-val re = new RegressionEvaluator().setLabelCol("medv").setMetricName("rmse")
-println(re.evaluate(brPredicted))
+val stringIndexer = new StringIndexer()
+.setInputCol("class")
+.setOutputCol("label")
+    
+val data = stringIndexer.fit(raw).transform(vectorAssembler.transform(raw))
 ```
 
-**Boosting**
+**Base Learner Settings**
 
 ```scala
-val data = spark.read.option("header", "true").option("inferSchema", "true").csv("src/test/resources/data/bostonhousing/train.csv")
-
-val vectorAssembler = new VectorAssembler().setInputCols(train.columns.filter(x => !x.equals("ID") && !x.equals("medv")))).setOutputCol("features")
-
-val baseRegressor = new DecisionTreeRegressor()
-val boostingRegressor = new BoostingRegressor().setBaseLearner(baseRegressor).setFeaturesCol("features").setLabelCol("medv").setMaxIter(10).setLearningRate(0.4)
-
-val formatted = vectorAssembler.transform(data)
-val Array(train, validation) = formatted.randomSplit(Array(0.7, 0.3))
-
-val brModel = boostingRegressor.fit(train)
-
-val brPredicted = brModel.transform(validation)
-brPredicted.show()
-
-val re = new RegressionEvaluator().setLabelCol("medv").setMetricName("rmse")
-println(re.evaluate(brPredicted))
+val baseClassifier = new DecisionTreeClassifier()
+.setMaxDepth(20)
+.setMaxBin(30)
 ```
 
-**Stacking**
+**Meta Estimator Settings**
 
 ```scala
-val data = spark.read.option("header", "true").option("inferSchema", "true").csv("src/test/resources/data/bostonhousing/train.csv")
-
-val vectorAssembler = new VectorAssembler().setInputCols(train.columns.filter(x => !x.equals("ID") && !x.equals("medv")))).setOutputCol("features")
-
-val regressors = Array(new RandomForestRegressor(),new DecisionTreeRegressor())
-val stacker = new DecisionTreeRegressor()
-val stackingRegressor = new StackingRegressor().setStacker(stacker).setLearners(regressors).setFeaturesCol("features").setLabelCol("medv").setParallelism(4)
-
-val formatted = vectorAssembler.transform(data)
-val Array(train, validation) = formatted.randomSplit(Array(0.7, 0.3))
-
-val srModel = stackingRegressor.fit(train)
-
-val srPredicted = srModel.transform(validation)
-srPredicted.show()
-
-val re = new RegressionEvaluator().setLabelCol("medv").setMetricName("rmse")
-println(re.evaluate(srPredicted))
+val baggingClassifier = new BaggingClassifier()
+.setBaseLearner(baseClassifier)
+.setMaxIter(10)
+.setParallelism(4)
 ```
 
-## Built With
+**Train and Test**
 
-* [Scala](https://www.scala-lang.org/) - Programming Language
-* [Spark](https://spark.apache.org/) - Big Data Framework
-* [SBT](https://www.scala-sbt.org/) - Build Tool
+```scala
+val Array(train, test) = data.randomSplit(Array(0.7, 0.3))
+
+val model = baggingClassifier.fit(train)
+
+model.models.map(_.asInstanceOf[DecisionTreeClassificationModel])
+
+val predicted = model.transform(test)
+predicted.show()
+
+val re = new MulticlassClassificationEvaluator()
+println(re.evaluate(predicted))
+```
 
 ## Contributing
 
