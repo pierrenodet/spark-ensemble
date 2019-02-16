@@ -86,6 +86,30 @@ val re = new MulticlassClassificationEvaluator()
 println(re.evaluate(predicted))
 ```
 
+**Cross Validation**
+
+```scala
+val paramGrid = new ParamGridBuilder()
+        .addGrid(baggingClassifier.sampleRatioFeatures, Array(0.7,1))
+        .addGrid(baggingClassifier.replacementFeatures, Array(x = false))
+        .addGrid(baggingClassifier.replacement, Array(x = true))
+        .addGrid(baggingClassifier.sampleRatio, Array(0.7, 1))
+        .addGrid(baggingClassifier.maxDepth, Array(1,10))
+        .addGrid(baggingClassifier.maxBins, Array(30,40))
+        .build()
+
+val cv = new CrossValidator()
+        .setEstimator(br)
+        .setEvaluator(new MulticlassClassificationEvaluator())
+        .setEstimatorParamMaps(paramGrid)
+        .setNumFolds(5)
+        .setParallelism(4)
+
+val cvModel = cv.fit(data)
+
+cvModel.bestModel.asInstanceOf[BaggingClassificationModel]
+```
+
 ## Contributing
 
 Feel free to open an issue or make a pull request to contribute to the repository.
