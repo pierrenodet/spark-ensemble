@@ -292,7 +292,7 @@ object BaggingRegressionModel extends MLReadable[BaggingRegressionModel] {
       val subSpaces = (0 until numModels).toArray.map { idx =>
         val dataPath = new Path(path, s"data-$idx").toString
         val data = sparkSession.read.json(dataPath).select("subSpace").head()
-        data.getAs[Seq[Int]](0).toArray
+        data.getAs[Seq[Long]](0).map(_.toInt).toArray
       }
       val bcModel = new BaggingRegressionModel(metadata.uid, subSpaces, models)
       metadata.getAndSetParams(bcModel)
