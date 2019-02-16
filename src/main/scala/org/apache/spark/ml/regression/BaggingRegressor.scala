@@ -165,7 +165,7 @@ class BaggingRegressor(override val uid: String)
             paramMap.put(getBaseLearner.labelCol -> "label")
             paramMap.put(getBaseLearner.featuresCol -> "features")
 
-            val model = getBaseLearner.fit(df,paramMap)
+            val model = getBaseLearner.fit(df, paramMap)
 
             instr.logDebug(s"Training done for $iter iteration on $df with $getBaseLearner")
 

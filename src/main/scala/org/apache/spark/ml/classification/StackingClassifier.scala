@@ -105,7 +105,7 @@ class StackingClassifier(override val uid: String)
           paramMap.put(learners(iter).labelCol -> getLabelCol)
           paramMap.put(learners(iter).featuresCol -> getFeaturesCol)
 
-          val model = learners(iter).fit(df,paramMap)
+          val model = learners(iter).fit(df, paramMap)
 
           instr.logDebug(s"Start training for $iter learner")
 
@@ -134,7 +134,7 @@ class StackingClassifier(override val uid: String)
       paramMap.put(getStacker.labelCol -> "label")
       paramMap.put(getStacker.featuresCol -> "features")
 
-      val stack = getStacker.fit(predictionsDF,paramMap)
+      val stack = getStacker.fit(predictionsDF, paramMap)
 
       df.unpersist()
 
