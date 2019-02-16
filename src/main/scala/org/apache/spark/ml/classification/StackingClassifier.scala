@@ -87,21 +87,6 @@ class StackingClassifier(override val uid: String)
     instr =>
       val spark = dataset.sparkSession
 
-      setBaseLearners(
-        getBaseLearners.map(
-          learner =>
-            learner
-              .set(learner.labelCol, getLabelCol)
-              .set(learner.featuresCol, getFeaturesCol)
-              .set(learner.predictionCol, "prediction")))
-
-      val tmp = getStacker
-      setStacker(
-        getStacker
-          .set(tmp.labelCol, "label")
-          .set(tmp.featuresCol, "features")
-          .set(tmp.predictionCol, getPredictionCol))
-
       instr.logPipelineStage(this)
       instr.logDataset(dataset)
       instr.logParams(this, seed)
@@ -116,7 +101,11 @@ class StackingClassifier(override val uid: String)
 
           instr.logDebug(s"Start training for $iter learner")
 
-          val model = learners(iter).fit(df)
+          val paramMap = new ParamMap()
+          paramMap.put(learners(iter).labelCol -> getLabelCol)
+          paramMap.put(learners(iter).featuresCol -> getFeaturesCol)
+
+          val model = learners(iter).fit(df,paramMap)
 
           instr.logDebug(s"Start training for $iter learner")
 
@@ -141,7 +130,11 @@ class StackingClassifier(override val uid: String)
 
       val predictionsDF = spark.createDataFrame(predictions)
 
-      val stack = getStacker.fit(predictionsDF)
+      val paramMap = new ParamMap()
+      paramMap.put(getStacker.labelCol -> "label")
+      paramMap.put(getStacker.featuresCol -> "features")
+
+      val stack = getStacker.fit(predictionsDF,paramMap)
 
       df.unpersist()
 

@@ -125,13 +125,6 @@ class BoostingClassifier(override val uid: String)
     instr =>
       val spark = dataset.sparkSession
 
-      val classifier = getBaseLearner
-      setBaseLearner(
-        classifier
-          .set(classifier.labelCol, getLabelCol)
-          .set(classifier.featuresCol, getFeaturesCol)
-          .set(classifier.predictionCol, getPredictionCol))
-
       instr.logPipelineStage(this)
       instr.logDataset(dataset)
       instr.logParams(this, maxIter, seed)
@@ -155,9 +148,6 @@ class BoostingClassifier(override val uid: String)
           seed: Long,
           loss: Double => Double)(instances: RDD[Instance])
         : (Option[(Double, EnsemblePredictionModelType)], RDD[Instance]) = {
-
-        val labelColName = baseLearner.getLabelCol
-        val featuresColName = baseLearner.getFeaturesCol
 
         val agg =
           instances.map { case Instance(_, weight, _) => (1, weight) }.reduce {
@@ -186,9 +176,13 @@ class BoostingClassifier(override val uid: String)
           return (None, instances)
         }
 
+        val paramMap = new ParamMap()
+        paramMap.put(baseLearner.labelCol -> "label")
+        paramMap.put(baseLearner.featuresCol -> "features")
+
         val sampledDF =
-          spark.createDataFrame(sampled).toDF(labelColName, "weight", featuresColName)
-        val model = baseLearner.fit(sampledDF)
+          spark.createDataFrame(sampled)
+        val model = baseLearner.fit(sampledDF, paramMap)
 
         //TODO: Implement multiclass loss function
         val errors = instances.map {

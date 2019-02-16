@@ -126,13 +126,6 @@ class BoostingRegressor(override val uid: String)
     instr =>
       val spark = dataset.sparkSession
 
-      val regressor = getBaseLearner
-      setBaseLearner(
-        regressor
-          .set(regressor.labelCol, getLabelCol)
-          .set(regressor.featuresCol, getFeaturesCol)
-          .set(regressor.predictionCol, getPredictionCol))
-
       instr.logPipelineStage(this)
       instr.logDataset(dataset)
       instr.logParams(this, maxIter, seed)
@@ -181,9 +174,13 @@ class BoostingRegressor(override val uid: String)
           return (None, instances)
         }
 
+        val paramMap = new ParamMap()
+        paramMap.put(baseLearner.labelCol -> "label")
+        paramMap.put(baseLearner.featuresCol -> "features")
+
         val sampledDF =
-          spark.createDataFrame(sampled).toDF(labelColName, "weight", featuresColName)
-        val model = baseLearner.fit(sampledDF)
+          spark.createDataFrame(sampled)
+        val model = baseLearner.fit(sampledDF, paramMap)
 
         //TODO: Implement multiclass loss function
         val errors = instances.map {

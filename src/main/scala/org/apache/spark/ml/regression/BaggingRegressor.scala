@@ -161,7 +161,11 @@ class BaggingRegressor(override val uid: String)
             val df = spark.createDataFrame(subspaced)
             instr.logDebug(s"Start training for $iter iteration on $df with $getBaseLearner")
 
-            val model = getBaseLearner.fit(df)
+            val paramMap = new ParamMap()
+            paramMap.put(getBaseLearner.labelCol -> "label")
+            paramMap.put(getBaseLearner.featuresCol -> "features")
+
+            val model = getBaseLearner.fit(df,paramMap)
 
             instr.logDebug(s"Training done for $iter iteration on $df with $getBaseLearner")
 

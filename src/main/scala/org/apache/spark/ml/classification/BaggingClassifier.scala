@@ -1,15 +1,10 @@
 package org.apache.spark.ml.classification
 
-import breeze.linalg.DenseVector
 import org.apache.commons.math3.stat.StatUtils
 import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.bagging._
-import org.apache.spark.ml.ensemble.{
-  EnsemblePredictionModelType,
-  EnsemblePredictorType,
-  HasBaseLearner
-}
+import org.apache.spark.ml.ensemble.{EnsemblePredictionModelType, EnsemblePredictorType, HasBaseLearner}
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.{ParamMap, ParamPair}
@@ -162,7 +157,11 @@ class BaggingClassifier(override val uid: String)
             val df = spark.createDataFrame(subspaced)
             instr.logDebug(s"Start training for $iter iteration on $df with $getBaseLearner")
 
-            val model = getBaseLearner.fit(df)
+            val paramMap = new ParamMap()
+            paramMap.put(getBaseLearner.labelCol -> "label")
+            paramMap.put(getBaseLearner.featuresCol -> "features")
+
+            val model = getBaseLearner.fit(df,paramMap)
 
             instr.logDebug(s"Training done for $iter iteration on $df with $getBaseLearner")
 
