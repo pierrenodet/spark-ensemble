@@ -6,7 +6,7 @@ import org.apache.spark.ml.feature.VectorAssembler
 import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
 import org.scalatest.FunSuite
 
-class BoostingRegressorSuite extends FunSuite with DatasetSuiteBase {
+class GBMRegressorSuite extends FunSuite with DatasetSuiteBase {
 
   test("benchmark") {
 
@@ -14,29 +14,29 @@ class BoostingRegressorSuite extends FunSuite with DatasetSuiteBase {
     val test = spark.read.option("header", "true").option("inferSchema", "true").csv("src/test/resources/data/bostonhousing/test.csv")
 
     val vectorAssembler = new VectorAssembler().setInputCols(raw.columns.filter(x => !x.equals("ID") && !x.equals("medv"))).setOutputCol("features")
-    val br = new BoostingRegressor().setBaseLearner(new DecisionTreeRegressor()).setFeaturesCol("features").setLabelCol("medv").setMaxIter(10)
+    val gmbr = new GBMRegressor().setBaseLearner(new DecisionTreeRegressor()).setFeaturesCol("features").setLabelCol("medv").setMaxIter(10).setTol(0.00001)
     val gbt = new GBTRegressor().setFeaturesCol("features").setLabelCol("medv").setMaxIter(10)
 
     val data = vectorAssembler.transform(raw)
     data.cache()
 
     time {
-      val brParamGrid = new ParamGridBuilder()
-        .addGrid(br.learningRate, Array(0.01,0.001,0.05,0.005))
+      val gbmrParamGrid = new ParamGridBuilder()
+        .addGrid(gmbr.learningRate, Array(0.1,0.01,0.05,1))
         .build()
 
-      val brCV = new CrossValidator()
-        .setEstimator(br)
-        .setEvaluator(new RegressionEvaluator().setLabelCol(br.getLabelCol).setPredictionCol(br.getPredictionCol).setMetricName("rmse"))
-        .setEstimatorParamMaps(brParamGrid)
+      val gmbrCV = new CrossValidator()
+        .setEstimator(gmbr)
+        .setEvaluator(new RegressionEvaluator().setLabelCol(gmbr.getLabelCol).setPredictionCol(gmbr.getPredictionCol).setMetricName("rmse"))
+        .setEstimatorParamMaps(gbmrParamGrid)
         .setNumFolds(5)
         .setParallelism(4)
 
-      val brCVModel = brCV.fit(data)
+      val gbmrCVModel = gmbrCV.fit(data)
 
-      println(brCVModel.avgMetrics.mkString(","))
-      println(brCVModel.bestModel.asInstanceOf[BoostingRegressionModel].getLearningRate)
-      println(brCVModel.avgMetrics.min)
+      println(gbmrCVModel.avgMetrics.mkString(","))
+      println(gbmrCVModel.bestModel.asInstanceOf[GBMRegressionModel].getLearningRate)
+      println(gbmrCVModel.avgMetrics.min)
 
     }
 
