@@ -1,5 +1,5 @@
 name := "spark-ensemble"
-scalaVersion := "2.11.12"
+scalaVersion := "2.12.7"
 
 inThisBuild(
   List(
@@ -16,10 +16,10 @@ inThisBuild(
   )
 )
 
-lazy val SparkVersion = "2.4.0"
+lazy val SparkVersion = "2.4.3"
 lazy val ScalaTestVersion = "3.0.5"
-lazy val ScalaCheckVersion = "1.13.4"
-lazy val SparkTestingBaseVersion = "0.11.0"
+lazy val ScalaCheckVersion = "1.14.0"
+lazy val SparkTestingBaseVersion = "0.12.0"
 
 libraryDependencies += "org.apache.spark" %% "spark-sql" % SparkVersion % Provided
 libraryDependencies += "org.apache.spark" %% "spark-mllib" % SparkVersion % Provided

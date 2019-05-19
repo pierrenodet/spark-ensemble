@@ -6,37 +6,41 @@ import org.apache.spark.ml.feature.VectorAssembler
 import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
 import org.scalatest.FunSuite
 
-class BoostingRegressorSuite extends FunSuite with DatasetSuiteBase {
+class GBMRegressorSuite extends FunSuite with DatasetSuiteBase {
 
   test("benchmark") {
 
     val raw = spark.read.option("header", "true").option("inferSchema", "true").csv("src/test/resources/data/bostonhousing/train.csv")
-    val test = spark.read.option("header", "true").option("inferSchema", "true").csv("src/test/resources/data/bostonhousing/test.csv")
 
     val vectorAssembler = new VectorAssembler().setInputCols(raw.columns.filter(x => !x.equals("ID") && !x.equals("medv"))).setOutputCol("features")
-    val br = new BoostingRegressor().setBaseLearner(new DecisionTreeRegressor()).setFeaturesCol("features").setLabelCol("medv").setMaxIter(10)
+    val gmbr = new GBMRegressor().setBaseLearner(new DecisionTreeRegressor()).setFeaturesCol("features").setLabelCol("medv").setMaxIter(10).setTol(1E-3)
     val gbt = new GBTRegressor().setFeaturesCol("features").setLabelCol("medv").setMaxIter(10)
+    val tree = new DecisionTreeRegressor().setFeaturesCol("features").setLabelCol("medv")
 
     val data = vectorAssembler.transform(raw)
     data.cache()
 
     time {
-      val brParamGrid = new ParamGridBuilder()
-        .addGrid(br.learningRate, Array(0.01,0.001,0.05,0.005))
+      val gbmrParamGrid = new ParamGridBuilder()
+        .addGrid(gmbr.learningRate, Array(0.1,0.01,0.05,1))
+        .addGrid(gmbr.loss, Array("ls","lad"))
         .build()
 
-      val brCV = new CrossValidator()
-        .setEstimator(br)
-        .setEvaluator(new RegressionEvaluator().setLabelCol(br.getLabelCol).setPredictionCol(br.getPredictionCol).setMetricName("rmse"))
-        .setEstimatorParamMaps(brParamGrid)
+      val gmbrCV = new CrossValidator()
+        .setEstimator(gmbr)
+        .setEvaluator(new RegressionEvaluator().setLabelCol(gmbr.getLabelCol).setPredictionCol(gmbr.getPredictionCol).setMetricName("rmse"))
+        .setEstimatorParamMaps(gbmrParamGrid)
         .setNumFolds(5)
         .setParallelism(4)
 
-      val brCVModel = brCV.fit(data)
+      val gbmrCVModel = gmbrCV.fit(data)
 
-      println(brCVModel.avgMetrics.mkString(","))
-      println(brCVModel.bestModel.asInstanceOf[BoostingRegressionModel].getLearningRate)
-      println(brCVModel.avgMetrics.min)
+      println(gbmrParamGrid.mkString(","))
+      println(gbmrCVModel.avgMetrics.mkString(","))
+      println(gbmrCVModel.bestModel.asInstanceOf[GBMRegressionModel].getLearningRate)
+      println(gbmrCVModel.bestModel.asInstanceOf[GBMRegressionModel].getLoss)
+      println(gbmrCVModel.bestModel.asInstanceOf[GBMRegressionModel].weights.mkString(","))
+      println(gbmrCVModel.avgMetrics.min)
 
     }
 
@@ -44,6 +48,7 @@ class BoostingRegressorSuite extends FunSuite with DatasetSuiteBase {
       val paramGrid = new ParamGridBuilder()
         .addGrid(gbt.featureSubsetStrategy, Array("auto"))
         .addGrid(gbt.subsamplingRate, Array(0.3,0.5,0.7,1))
+        .addGrid(gbt.lossType, Array("squared","absolute"))
         .build()
 
       val cv = new CrossValidator()
@@ -57,6 +62,23 @@ class BoostingRegressorSuite extends FunSuite with DatasetSuiteBase {
 
       println(cvModel.avgMetrics.mkString(","))
       println(cvModel.bestModel.asInstanceOf[GBTRegressionModel].getSubsamplingRate)
+      println(cvModel.avgMetrics.min)
+    }
+
+    time {
+      val paramGrid = new ParamGridBuilder()
+        .build()
+
+      val cv = new CrossValidator()
+        .setEstimator(tree)
+        .setEvaluator(new RegressionEvaluator().setLabelCol(gbt.getLabelCol).setPredictionCol(gbt.getPredictionCol).setMetricName("rmse"))
+        .setEstimatorParamMaps(paramGrid)
+        .setNumFolds(5)
+        .setParallelism(4)
+
+      val cvModel = cv.fit(data)
+
+      println(cvModel.avgMetrics.mkString(","))
       println(cvModel.avgMetrics.min)
     }
   }

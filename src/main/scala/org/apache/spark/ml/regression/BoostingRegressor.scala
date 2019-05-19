@@ -9,7 +9,6 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.Predictor
 import org.apache.spark.ml.boosting.BoostingParams
-import org.apache.spark.ml.classification.ClassifierParams
 import org.apache.spark.ml.ensemble.{
   EnsemblePredictionModelType,
   EnsemblePredictorType,
@@ -28,7 +27,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{parse, render}
 import org.json4s.{DefaultFormats, JObject}
 
-trait BoostingRegressorParams extends BoostingParams with ClassifierParams {
+trait BoostingRegressorParams extends BoostingParams {
 
   /**
    * Loss function which Boosting tries to minimize. (case-insensitive)

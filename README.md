@@ -34,6 +34,7 @@ This Spark ML library contains the following algorithms for ensemble learning :
  * [Boosting R2](https://pdfs.semanticscholar.org/8d49/e2dedb817f2c3330e74b63c5fc86d2399ce3.pdf)
  * [Boosting SAMME](https://web.stanford.edu/~hastie/Papers/samme.pdf)
  * [Stacking](https://en.wikipedia.org/wiki/Ensemble_learning#Stacking)
+ * [GBM](https://statweb.stanford.edu/~jhf/ftp/trebst.pdf)
 
 ## How to use
 
