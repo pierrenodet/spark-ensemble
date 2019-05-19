@@ -23,7 +23,7 @@ class GBMClassifierSuite extends FunSuite with DatasetSuiteBase {
 
     time {
       val brParamGrid = new ParamGridBuilder()
-    .addGrid(br.learningRate, Array(0.3,0.8,1.0))
+    .addGrid(br.learningRate, Array(0.1,0.3,0.8,1.0))
     .build()
 
       val brCV = new CrossValidator()
@@ -38,7 +38,8 @@ class GBMClassifierSuite extends FunSuite with DatasetSuiteBase {
       val brCVModel = brCV.fit(data)
 
       println(brCVModel.avgMetrics.mkString(","))
-      println(brCVModel.bestModel.asInstanceOf[BoostingClassificationModel].getLearningRate)
+      println(brCVModel.bestModel.asInstanceOf[GBMClassificationModel].getLearningRate)
+      println(brCVModel.bestModel.asInstanceOf[GBMClassificationModel].weights.map(_.mkString(",")).mkString(","))
       println(brCVModel.avgMetrics.max)
     }
 

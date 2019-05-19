@@ -65,10 +65,10 @@ object HasBaseLearner {
 trait HasBaseProbabilisticClassifier extends Params {
 
   /**
-    * param for the estimator that will be used by the ensemble learner as a base probabilistic classifier
-    *
-    * @group param
-    */
+   * param for the estimator that will be used by the ensemble learner as a base probabilistic classifier
+   *
+   * @group param
+   */
   val baseProbabilisticClassifier: Param[EnsembleProbabilisticClassifierType] =
     new Param[EnsembleProbabilisticClassifierType](
       this,
@@ -76,17 +76,18 @@ trait HasBaseProbabilisticClassifier extends Params {
       "base learner that will be used by the ensemble learner")
 
   /** @group getParam */
-  def getBaseProbabilisticClassifier: EnsembleProbabilisticClassifierType = $(baseProbabilisticClassifier)
+  def getBaseProbabilisticClassifier: EnsembleProbabilisticClassifierType =
+    $(baseProbabilisticClassifier)
 
 }
 
 object HasBaseProbabilisticClassifier {
 
   def saveImpl(
-                instance: HasBaseProbabilisticClassifier,
-                path: String,
-                sc: SparkContext,
-                extraMetadata: Option[JObject] = None): Unit = {
+      instance: HasBaseProbabilisticClassifier,
+      path: String,
+      sc: SparkContext,
+      extraMetadata: Option[JObject] = None): Unit = {
 
     val learnerPath = new Path(path, "learner").toString
     instance.getBaseProbabilisticClassifier.asInstanceOf[MLWritable].save(learnerPath)

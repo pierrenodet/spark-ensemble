@@ -11,4 +11,7 @@ trait GBMParams
     with HasSeed
     with HasBaseLearner
     with HasLearningRate
-    with HasTol{}
+    with HasTol {
+
+  setDefault(tol -> 1E-3)
+}

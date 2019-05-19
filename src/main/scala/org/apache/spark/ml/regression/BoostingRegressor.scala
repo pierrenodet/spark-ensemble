@@ -9,7 +9,11 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.Predictor
 import org.apache.spark.ml.boosting.BoostingParams
-import org.apache.spark.ml.ensemble.{EnsemblePredictionModelType, EnsemblePredictorType, HasBaseLearner}
+import org.apache.spark.ml.ensemble.{
+  EnsemblePredictionModelType,
+  EnsemblePredictorType,
+  HasBaseLearner
+}
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.{Param, ParamMap, ParamPair}
