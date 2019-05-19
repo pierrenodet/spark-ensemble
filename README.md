@@ -13,7 +13,7 @@ Download the dependency from Maven Central
 **SBT**
 
 ```scala
-libraryDependencies += "com.github.pierrenodet" % "spark-ensemble_2.11" % "0.4.0"
+libraryDependencies += "com.github.pierrenodet" % "spark-ensemble_2.11" % "0.5.0"
 ```
 
 **Maven**
@@ -22,7 +22,7 @@ libraryDependencies += "com.github.pierrenodet" % "spark-ensemble_2.11" % "0.4.0
 <dependency>
   <groupId>com.github.pierrenodet</groupId>
   <artifactId>spark-ensemble_2.11</artifactId>
-  <version>0.4.0</version>
+  <version>0.5.0</version>
 </dependency>
 ```
 
