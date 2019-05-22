@@ -157,6 +157,13 @@ class GBMRegressor(override val uid: String)
             Instance(label, weight, features)
         }
 
+      val persistedInput = if (instances.getStorageLevel == StorageLevel.NONE) {
+        instances.persist(StorageLevel.MEMORY_AND_DISK)
+        true
+      } else {
+        false
+      }
+
       val lossFunction: (Double, Double) => Double =
         GBMRegressorParams.lossFunction(getLoss)
       val negGradFunction: (Double, Double) => Double =
@@ -189,7 +196,7 @@ class GBMRegressor(override val uid: String)
 
         val booster = getBaseLearner.fit(residualsDF, paramMap)
 
-        /*def weightFunction(instances: RDD[Instance])(x: DenseVector[Double]): Double = {
+       /* def weightFunction(instances: RDD[Instance])(x: DenseVector[Double]): Double = {
           instances
             .map(instance =>
               loss(instance.label, weightedBoosters.map {
@@ -222,13 +229,6 @@ class GBMRegressor(override val uid: String)
           boosters: Array[EnsemblePredictionModelType],
           iter: Int): (Array[Double], Array[EnsemblePredictionModelType]) = {
 
-        val persistedInput = if (instances.getStorageLevel == StorageLevel.NONE) {
-          instances.persist(StorageLevel.MEMORY_AND_DISK)
-          true
-        } else {
-          false
-        }
-
         val (weight, booster) =
           trainBooster(
             baseLearner,
@@ -241,7 +241,6 @@ class GBMRegressor(override val uid: String)
             boosters)(instances)
 
         if (iter == 0) {
-          if (persistedInput) instances.unpersist()
           (weights, boosters)
         } else {
           trainBoosters(baseLearner, learningRate, tol, seed + iter, loss, negGrad)(
@@ -269,6 +268,8 @@ class GBMRegressor(override val uid: String)
           getSeed,
           lossFunction,
           negGradFunction)(instances, Array(1), Array(init), getMaxIter)
+
+      if (persistedInput) instances.unpersist()
 
       new GBMRegressionModel(boosters._1, boosters._2)
 

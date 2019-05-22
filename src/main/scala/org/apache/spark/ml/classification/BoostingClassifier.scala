@@ -140,6 +140,13 @@ class BoostingClassifier(override val uid: String)
             Instance(label, weight, features)
         }
 
+      val persistedInput = if (instances.getStorageLevel == StorageLevel.NONE) {
+        instances.persist(StorageLevel.MEMORY_AND_DISK)
+        true
+      } else {
+        false
+      }
+
       val lossFunction: Double => Double = BoostingClassifierParams.lossFunction(getLoss)
 
       def trainBooster(
@@ -219,18 +226,10 @@ class BoostingClassifier(override val uid: String)
           acc: Array[Option[(Double, EnsemblePredictionModelType)]],
           iter: Int): Array[Option[(Double, EnsemblePredictionModelType)]] = {
 
-        val persistedInput = if (instances.getStorageLevel == StorageLevel.NONE) {
-          instances.persist(StorageLevel.MEMORY_AND_DISK)
-          true
-        } else {
-          false
-        }
-
         val (bpm, updated) =
           trainBooster(baseLearner, learningRate, seed + iter, loss)(instances)
 
         if (iter == 0) {
-          if (persistedInput) instances.unpersist()
           acc
         } else {
           trainBoosters(baseLearner, learningRate, seed + iter, loss)(
@@ -247,6 +246,8 @@ class BoostingClassifier(override val uid: String)
           getMaxIter)
 
       val usefulModels = models.flatten
+
+      if (persistedInput) instances.unpersist()
 
       new BoostingClassificationModel(numClasses, usefulModels)
 
