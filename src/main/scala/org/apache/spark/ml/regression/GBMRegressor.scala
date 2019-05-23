@@ -196,7 +196,7 @@ class GBMRegressor(override val uid: String)
 
         val booster = getBaseLearner.fit(residualsDF, paramMap)
 
-       /* def weightFunction(instances: RDD[Instance])(x: DenseVector[Double]): Double = {
+        /* def weightFunction(instances: RDD[Instance])(x: DenseVector[Double]): Double = {
           instances
             .map(instance =>
               loss(instance.label, weightedBoosters.map {
