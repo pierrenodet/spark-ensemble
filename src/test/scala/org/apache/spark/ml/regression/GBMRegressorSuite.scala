@@ -12,13 +12,13 @@ class GBMRegressorSuite extends FunSuite with DatasetSuiteBase {
 
     val raw = spark.read.option("header", "true").option("inferSchema", "true").csv("src/test/resources/data/bostonhousing/train.csv")
 
-    val vectorAssembler = new VectorAssembler().setInputCols(raw.columns.filter(x => !x.equals("ID") && !x.equals("medv"))).setOutputCol("features")
-    val gmbr = new GBMRegressor().setBaseLearner(new DecisionTreeRegressor()).setFeaturesCol("features").setLabelCol("medv").setMaxIter(10).setTol(1E-3)
-    val gbt = new GBTRegressor().setFeaturesCol("features").setLabelCol("medv").setMaxIter(10)
-    val tree = new DecisionTreeRegressor().setFeaturesCol("features").setLabelCol("medv")
+    val vectorAssembler = new VectorAssembler().setInputCols(raw.columns.filter(x => !x.equals("ID") && !x.equals("medv"))).setOutputCol("features_test")
+    val gmbr = new GBMRegressor().setBaseLearner(new DecisionTreeRegressor()).setFeaturesCol("features_test").setLabelCol("medv").setMaxIter(10)
+    val gbt = new GBTRegressor().setFeaturesCol("features_test").setLabelCol("medv").setMaxIter(10)
+    val tree = new DecisionTreeRegressor().setFeaturesCol("features_test").setLabelCol("medv")
 
     val data = vectorAssembler.transform(raw)
-    data.cache()
+    data.cache().first()
 
     time {
       val gbmrParamGrid = new ParamGridBuilder()
@@ -39,7 +39,7 @@ class GBMRegressorSuite extends FunSuite with DatasetSuiteBase {
       println(gbmrCVModel.avgMetrics.mkString(","))
       println(gbmrCVModel.bestModel.asInstanceOf[GBMRegressionModel].getLearningRate)
       println(gbmrCVModel.bestModel.asInstanceOf[GBMRegressionModel].getLoss)
-      println(gbmrCVModel.bestModel.asInstanceOf[GBMRegressionModel].weights.mkString(","))
+      println(gbmrCVModel.bestModel.asInstanceOf[GBMRegressionModel].models.length)
       println(gbmrCVModel.avgMetrics.min)
 
     }
@@ -61,7 +61,8 @@ class GBMRegressorSuite extends FunSuite with DatasetSuiteBase {
       val cvModel = cv.fit(data)
 
       println(cvModel.avgMetrics.mkString(","))
-      println(cvModel.bestModel.asInstanceOf[GBTRegressionModel].getSubsamplingRate)
+      println(cvModel.bestModel.asInstanceOf[GBTRegressionModel].getLossType)
+      println(cvModel.bestModel.asInstanceOf[GBTRegressionModel].getNumTrees)
       println(cvModel.avgMetrics.min)
     }
 
