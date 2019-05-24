@@ -173,7 +173,8 @@ class GBMRegressor(override val uid: String)
                          loss: (Double, Double) => Double,
                          negGrad: (Double, Double) => Double,
                          tol: Double,
-                         seed: Long)(
+                         seed: Long,
+                         instrumentation: Instrumentation)(
                          weights: Array[Double],
                          boosters: Array[EnsemblePredictionModelType],
                          iter: Int): (Array[Double], Array[EnsemblePredictionModelType]) = {
@@ -184,7 +185,7 @@ class GBMRegressor(override val uid: String)
 
         } else {
 
-          instr.logNamedValue("iteration", iter)
+          instrumentation.logNamedValue("iteration", iter)
 
           val ngUDF = udf(negGrad)
 
@@ -200,11 +201,6 @@ class GBMRegressor(override val uid: String)
           paramMap.put(baseLearner.featuresCol -> featuresColName)
           paramMap.put(baseLearner.predictionCol -> predictionColName)
 
-          residuals.schema.foreach(kek => println(kek.metadata.toString()))
-          println(learningRate)
-          println(iter)
-          residuals.show()
-
           val booster = if (weightColName.isDefined) {
             val baseLearner_ = baseLearner.asInstanceOf[EnsemblePredictorType with HasWeightCol]
             paramMap.put(baseLearner_.weightCol -> weightColName.get)
@@ -215,11 +211,11 @@ class GBMRegressor(override val uid: String)
 
           val weight = learningRate
 
-          instr.logNamedValue("weight", weight)
-          instr.logInfo("booster")
-          instr.logPipelineStage(booster)
+          instrumentation.logNamedValue("weight", weight)
+          instrumentation.logInfo("booster")
+          instrumentation.logPipelineStage(booster)
 
-          trainBoosters(train, labelColName, weightColName, featuresColName, predictionColName, baseLearner, learningRate, loss, negGrad, tol, seed + iter)(
+          trainBoosters(train, labelColName, weightColName, featuresColName, predictionColName, baseLearner, learningRate, loss, negGrad, tol, seed + iter, instrumentation)(
             weights :+ weight,
             boosters :+ booster.asInstanceOf[EnsemblePredictionModelType],
             iter - 1)
@@ -260,7 +256,8 @@ class GBMRegressor(override val uid: String)
           GBMRegressorParams.lossFunction(getLoss),
           GBMRegressorParams.gradFunction(getLoss),
           getTol,
-          getSeed
+          getSeed,
+          instr
         )(Array(initWeight), Array(initBooster.asInstanceOf[EnsemblePredictionModelType]), getMaxIter)
 
       if (handlePersistence) {
