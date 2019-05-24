@@ -1,6 +1,6 @@
 package org.apache.spark.ml.regression
 
-import java.util.{Locale, UUID}
+import java.util.Locale
 
 import org.apache.commons.math3.util.FastMath
 import org.apache.hadoop.fs.Path
@@ -188,20 +188,15 @@ class GBMRegressor(override val uid: String)
 
           val ngUDF = udf(negGrad)
 
-          val tmpColName = "gbm$tmp" + UUID.randomUUID().toString
-          val prdColName = "gbm$prd" + UUID.randomUUID().toString
-
           val current = new GBMRegressionModel(weights, boosters)
 
           val predUDF = udf { features: Vector => current.predict(features) }
 
-          // check with udf of predict
           val residuals = train
-            .withColumn(prdColName, predUDF(col(featuresColName)))
-            .withColumn(tmpColName, ngUDF(col(labelColName), col(prdColName)))
+            .withColumn(labelColName, ngUDF(col(labelColName), predUDF(col(featuresColName))), train.schema(train.schema.fieldIndex(labelColName)).metadata)
 
           val paramMap = new ParamMap()
-          paramMap.put(baseLearner.labelCol -> tmpColName)
+          paramMap.put(baseLearner.labelCol -> labelColName)
           paramMap.put(baseLearner.featuresCol -> featuresColName)
           paramMap.put(baseLearner.predictionCol -> predictionColName)
 
