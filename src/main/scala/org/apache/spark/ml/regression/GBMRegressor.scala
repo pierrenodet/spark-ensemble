@@ -6,7 +6,11 @@ import org.apache.commons.math3.util.FastMath
 import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.boosting.GBMParams
-import org.apache.spark.ml.ensemble.{EnsemblePredictionModelType, EnsemblePredictorType, HasBaseLearner}
+import org.apache.spark.ml.ensemble.{
+  EnsemblePredictionModelType,
+  EnsemblePredictorType,
+  HasBaseLearner
+}
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.param.{Param, ParamMap, ParamPair}
@@ -135,11 +139,19 @@ class GBMRegressor(override val uid: String)
 
   override protected def train(dataset: Dataset[_]): GBMRegressionModel =
     instrumented { instr =>
-
       instr.logPipelineStage(this)
       instr.logDataset(dataset)
-      instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol,
-        loss, maxIter, learningRate, tol, seed)
+      instr.logParams(
+        this,
+        labelCol,
+        weightCol,
+        featuresCol,
+        predictionCol,
+        loss,
+        maxIter,
+        learningRate,
+        tol,
+        seed)
 
       val weightColIsUsed = isDefined(weightCol) && $(weightCol).nonEmpty && {
         getBaseLearner match {
@@ -163,21 +175,21 @@ class GBMRegressor(override val uid: String)
 
       @tailrec
       def trainBoosters(
-                         train: Dataset[_],
-                         labelColName: String,
-                         weightColName: Option[String],
-                         featuresColName: String,
-                         predictionColName: String,
-                         baseLearner: EnsemblePredictorType,
-                         learningRate: Double,
-                         loss: (Double, Double) => Double,
-                         negGrad: (Double, Double) => Double,
-                         tol: Double,
-                         seed: Long,
-                         instrumentation: Instrumentation)(
-                         weights: Array[Double],
-                         boosters: Array[EnsemblePredictionModelType],
-                         iter: Int): (Array[Double], Array[EnsemblePredictionModelType]) = {
+          train: Dataset[_],
+          labelColName: String,
+          weightColName: Option[String],
+          featuresColName: String,
+          predictionColName: String,
+          baseLearner: EnsemblePredictorType,
+          learningRate: Double,
+          loss: (Double, Double) => Double,
+          negGrad: (Double, Double) => Double,
+          tol: Double,
+          seed: Long,
+          instrumentation: Instrumentation)(
+          weights: Array[Double],
+          boosters: Array[EnsemblePredictionModelType],
+          iter: Int): (Array[Double], Array[EnsemblePredictionModelType]) = {
 
         if (iter == 0) {
 
@@ -191,10 +203,15 @@ class GBMRegressor(override val uid: String)
 
           val current = new GBMRegressionModel(weights, boosters)
 
-          val predUDF = udf { features: Vector => current.predict(features) }
+          val predUDF = udf { features: Vector =>
+            current.predict(features)
+          }
 
           val residuals = train
-            .withColumn(labelColName, ngUDF(col(labelColName), predUDF(col(featuresColName))), train.schema(train.schema.fieldIndex(labelColName)).metadata)
+            .withColumn(
+              labelColName,
+              ngUDF(col(labelColName), predUDF(col(featuresColName))),
+              train.schema(train.schema.fieldIndex(labelColName)).metadata)
 
           val paramMap = new ParamMap()
           paramMap.put(baseLearner.labelCol -> labelColName)
@@ -215,7 +232,19 @@ class GBMRegressor(override val uid: String)
           instrumentation.logInfo("booster")
           instrumentation.logPipelineStage(booster)
 
-          trainBoosters(train, labelColName, weightColName, featuresColName, predictionColName, baseLearner, learningRate, loss, negGrad, tol, seed + iter, instrumentation)(
+          trainBoosters(
+            train,
+            labelColName,
+            weightColName,
+            featuresColName,
+            predictionColName,
+            baseLearner,
+            learningRate,
+            loss,
+            negGrad,
+            tol,
+            seed + iter,
+            instrumentation)(
             weights :+ weight,
             boosters :+ booster.asInstanceOf[EnsemblePredictionModelType],
             iter - 1)
@@ -257,8 +286,10 @@ class GBMRegressor(override val uid: String)
           GBMRegressorParams.gradFunction(getLoss),
           getTol,
           getSeed,
-          instr
-        )(Array(initWeight), Array(initBooster.asInstanceOf[EnsemblePredictionModelType]), getMaxIter)
+          instr)(
+          Array(initWeight),
+          Array(initBooster.asInstanceOf[EnsemblePredictionModelType]),
+          getMaxIter)
 
       if (handlePersistence) {
         df.unpersist()
