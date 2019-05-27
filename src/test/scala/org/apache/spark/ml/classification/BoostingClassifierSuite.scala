@@ -2,7 +2,6 @@ package org.apache.spark.ml.classification
 
 import com.holdenkarau.spark.testing.DatasetSuiteBase
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
-import org.apache.spark.ml.feature.{StringIndexer, VectorAssembler}
 import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
 import org.scalatest.FunSuite
 
@@ -10,14 +9,12 @@ class BoostingClassifierSuite extends FunSuite with DatasetSuiteBase {
 
   test("benchmark") {
 
-    val raw = spark.read.option("header", "true").option("inferSchema", "true").csv("src/test/resources/data/iris/train.csv")
+    val raw = spark.read.format("libsvm").load("src/test/resources/data/vehicle/train.scale")
 
-    val vectorAssembler = new VectorAssembler().setInputCols(raw.columns.filter(x => !x.equals("class"))).setOutputCol("features")
-    val stringIndexer = new StringIndexer().setInputCol("class").setOutputCol("label")
     val br = new BoostingClassifier().setBaseLearner(new DecisionTreeClassifier()).setMaxIter(10)
     val rf = new RandomForestClassifier().setNumTrees(10)
 
-    val data = stringIndexer.fit(raw).transform(vectorAssembler.transform(raw))
+    val data = raw
     data.cache()
 
     time {

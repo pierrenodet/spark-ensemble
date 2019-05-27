@@ -2,8 +2,6 @@ package org.apache.spark.ml.regression
 
 import java.util.Locale
 
-import breeze.linalg.DenseVector
-import breeze.optimize.{ApproximateGradientFunction, LBFGS}
 import org.apache.commons.math3.util.FastMath
 import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
@@ -13,15 +11,14 @@ import org.apache.spark.ml.ensemble.{
   EnsemblePredictorType,
   HasBaseLearner
 }
-import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.param.{Param, ParamMap, ParamPair}
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.{PredictionModel, Predictor}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.functions.{col, lit}
-import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.functions._
 import org.apache.spark.storage.StorageLevel
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{parse, render}
@@ -142,136 +139,163 @@ class GBMRegressor(override val uid: String)
 
   override protected def train(dataset: Dataset[_]): GBMRegressionModel =
     instrumented { instr =>
-      val spark = dataset.sparkSession
-
       instr.logPipelineStage(this)
       instr.logDataset(dataset)
-      instr.logParams(this, maxIter, seed)
+      instr.logParams(
+        this,
+        labelCol,
+        weightCol,
+        featuresCol,
+        predictionCol,
+        loss,
+        maxIter,
+        learningRate,
+        tol,
+        seed)
 
-      val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
-      if (!isDefined(weightCol) || $(weightCol).isEmpty) setWeightCol("weight")
-
-      val instances: RDD[Instance] =
-        dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd.map {
-          case Row(label: Double, weight: Double, features: Vector) =>
-            Instance(label, weight, features)
+      val weightColIsUsed = isDefined(weightCol) && $(weightCol).nonEmpty && {
+        getBaseLearner match {
+          case _: HasWeightCol => true
+          case c =>
+            instr.logWarning(s"weightCol is ignored, as it is not supported by $c now.")
+            false
         }
-
-      val persistedInput = if (instances.getStorageLevel == StorageLevel.NONE) {
-        instances.persist(StorageLevel.MEMORY_AND_DISK)
-        true
-      } else {
-        false
       }
 
-      val lossFunction: (Double, Double) => Double =
-        GBMRegressorParams.lossFunction(getLoss)
-      val negGradFunction: (Double, Double) => Double =
-        GBMRegressorParams.gradFunction(getLoss)
+      val df = if (weightColIsUsed) {
+        dataset.select($(labelCol), $(featuresCol), $(weightCol))
+      } else {
+        dataset.select($(labelCol), $(featuresCol))
+      }
 
-      def trainBooster(
-          baseLearner: EnsemblePredictorType,
-          learningRate: Double,
-          tol: Double,
-          seed: Long,
-          loss: (Double, Double) => Double,
-          negGrad: (Double, Double) => Double,
-          weights: Array[Double],
-          boosters: Array[EnsemblePredictionModelType])(
-          instances: RDD[Instance]): (Double, EnsemblePredictionModelType) = {
-
-        val weightedBoosters = weights.zip(boosters)
-
-        val residuals = instances.map(instance =>
-          Instance(negGrad(instance.label, weightedBoosters.map {
-            case (weight, model) => weight * model.predict(instance.features)
-          }.sum), instance.weight, instance.features))
-
-        val residualsDF =
-          spark.createDataFrame(residuals)
-
-        val paramMap = new ParamMap()
-        paramMap.put(getBaseLearner.labelCol -> "label")
-        paramMap.put(getBaseLearner.featuresCol -> "features")
-
-        val booster = getBaseLearner.fit(residualsDF, paramMap)
-
-        /* def weightFunction(instances: RDD[Instance])(x: DenseVector[Double]): Double = {
-          instances
-            .map(instance =>
-              loss(instance.label, weightedBoosters.map {
-                case (weight, model) => weight * model.predict(instance.features)
-              }.sum + x(0) * booster.predict(instance.features)))
-            .sum
-        }
-
-        val lbfgs = new LBFGS[DenseVector[Double]](maxIter = 100000, m = 7, tolerance = tol)
-
-        val agf = new ApproximateGradientFunction(weightFunction(instances))
-
-        val pho = lbfgs.minimize(agf, DenseVector(0.1))
-
-        (pho(0) * */
-        (learningRate, booster.asInstanceOf[EnsemblePredictionModelType])
-
+      val handlePersistence = dataset.storageLevel == StorageLevel.NONE && (df.storageLevel == StorageLevel.NONE)
+      if (handlePersistence) {
+        df.persist(StorageLevel.MEMORY_AND_DISK)
       }
 
       @tailrec
       def trainBoosters(
+          train: Dataset[_],
+          labelColName: String,
+          weightColName: Option[String],
+          featuresColName: String,
+          predictionColName: String,
           baseLearner: EnsemblePredictorType,
           learningRate: Double,
+          loss: (Double, Double) => Double,
+          negGrad: (Double, Double) => Double,
           tol: Double,
           seed: Long,
-          loss: (Double, Double) => Double,
-          negGrad: (Double, Double) => Double)(
-          instances: RDD[Instance],
+          instrumentation: Instrumentation)(
           weights: Array[Double],
           boosters: Array[EnsemblePredictionModelType],
           iter: Int): (Array[Double], Array[EnsemblePredictionModelType]) = {
 
-        val (weight, booster) =
-          trainBooster(
+        if (iter == 0) {
+
+          (weights, boosters)
+
+        } else {
+
+          instrumentation.logNamedValue("iteration", iter)
+
+          val ngUDF = udf(negGrad)
+
+          val current = new GBMRegressionModel(weights, boosters)
+
+          val predUDF = udf { features: Vector =>
+            current.predict(features)
+          }
+
+          val residuals = train
+            .withColumn(
+              labelColName,
+              ngUDF(col(labelColName), predUDF(col(featuresColName))),
+              train.schema(train.schema.fieldIndex(labelColName)).metadata)
+
+          val paramMap = new ParamMap()
+          paramMap.put(baseLearner.labelCol -> labelColName)
+          paramMap.put(baseLearner.featuresCol -> featuresColName)
+          paramMap.put(baseLearner.predictionCol -> predictionColName)
+
+          val booster = if (weightColName.isDefined) {
+            val baseLearner_ = baseLearner.asInstanceOf[EnsemblePredictorType with HasWeightCol]
+            paramMap.put(baseLearner_.weightCol -> weightColName.get)
+            baseLearner_.fit(residuals, paramMap)
+          } else {
+            baseLearner.fit(residuals, paramMap)
+          }
+
+          val weight = learningRate
+
+          instrumentation.logNamedValue("weight", weight)
+          instrumentation.logInfo("booster")
+          instrumentation.logPipelineStage(booster)
+
+          trainBoosters(
+            train,
+            labelColName,
+            weightColName,
+            featuresColName,
+            predictionColName,
             baseLearner,
             learningRate,
-            tol,
-            seed + iter,
             loss,
             negGrad,
-            weights,
-            boosters)(instances)
-
-        if (iter == 0) {
-          (weights, boosters)
-        } else {
-          trainBoosters(baseLearner, learningRate, tol, seed + iter, loss, negGrad)(
-            instances,
+            tol,
+            seed + iter,
+            instrumentation)(
             weights :+ weight,
-            boosters :+ booster,
+            boosters :+ booster.asInstanceOf[EnsemblePredictionModelType],
             iter - 1)
         }
+
       }
 
-      val df =
-        spark.createDataFrame(instances)
-
       val paramMap = new ParamMap()
-      paramMap.put(getBaseLearner.labelCol -> "label")
-      paramMap.put(getBaseLearner.featuresCol -> "features")
+      paramMap.put(getBaseLearner.labelCol -> getLabelCol)
+      paramMap.put(getBaseLearner.featuresCol -> getFeaturesCol)
+      paramMap.put(getBaseLearner.predictionCol -> getPredictionCol)
 
-      val init = getBaseLearner.fit(df, paramMap).asInstanceOf[EnsemblePredictionModelType]
+      val initBooster = if (weightColIsUsed) {
+        val baseLearner_ = getBaseLearner.asInstanceOf[EnsemblePredictorType with HasWeightCol]
+        paramMap.put(baseLearner_.weightCol -> getWeightCol)
+        baseLearner_.fit(df, paramMap)
+      } else {
+        getBaseLearner.fit(df, paramMap)
+      }
 
-      val boosters =
+      val initWeight = 1
+
+      val optWeightColName = if (weightColIsUsed) {
+        Some($(weightCol))
+      } else {
+        None
+      }
+
+      val (weights, boosters) =
         trainBoosters(
+          df,
+          getLabelCol,
+          optWeightColName,
+          getFeaturesCol,
+          getPredictionCol,
           getBaseLearner,
           getLearningRate,
+          GBMRegressorParams.lossFunction(getLoss),
+          GBMRegressorParams.gradFunction(getLoss),
           getTol,
           getSeed,
-          lossFunction,
-          negGradFunction)(instances, Array(1), Array(init), getMaxIter)
+          instr)(
+          Array(initWeight),
+          Array(initBooster.asInstanceOf[EnsemblePredictionModelType]),
+          getMaxIter)
 
-      if (persistedInput) instances.unpersist()
+      if (handlePersistence) {
+        df.unpersist()
+      }
 
-      new GBMRegressionModel(boosters._1, boosters._2)
+      new GBMRegressionModel(weights, boosters)
 
     }
 

@@ -2,7 +2,6 @@ package org.apache.spark.ml.classification
 
 import com.holdenkarau.spark.testing.DatasetSuiteBase
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
-import org.apache.spark.ml.feature.{StringIndexer, VectorAssembler}
 import org.apache.spark.ml.regression.DecisionTreeRegressor
 import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
 import org.scalatest.FunSuite
@@ -11,25 +10,25 @@ class GBMClassifierSuite extends FunSuite with DatasetSuiteBase {
 
   test("benchmark") {
 
-    val raw = spark.read.option("header", "true").option("inferSchema", "true").csv("src/test/resources/data/iris/train.csv")
+    val raw = spark.read.format("libsvm").load("src/test/resources/data/vehicle/train.scale")
 
-    val vectorAssembler = new VectorAssembler().setInputCols(raw.columns.filter(x => !x.equals("class"))).setOutputCol("features")
-    val stringIndexer = new StringIndexer().setInputCol("class").setOutputCol("label")
     val br = new GBMClassifier().setBaseLearner(new DecisionTreeRegressor()).setMaxIter(10)
     val rf = new RandomForestClassifier().setNumTrees(10)
+    val dc = new DecisionTreeClassifier()
 
-    val data = stringIndexer.fit(raw).transform(vectorAssembler.transform(raw))
+    val data = raw
     data.cache()
 
     time {
       val brParamGrid = new ParamGridBuilder()
-    .addGrid(br.learningRate, Array(0.1,0.3,0.8,1.0))
-    .build()
+        .addGrid(br.learningRate, Array(0.1, 1.0))
+        .addGrid(br.maxIter, Array(1, 10))
+        .build()
 
       val brCV = new CrossValidator()
     .setEstimator(br)
     .setEvaluator(
-      new MulticlassClassificationEvaluator().setLabelCol(br.getLabelCol).setPredictionCol(br.getPredictionCol)
+      new MulticlassClassificationEvaluator().setMetricName("accuracy").setLabelCol(br.getLabelCol).setPredictionCol(br.getPredictionCol)
     )
     .setEstimatorParamMaps(brParamGrid)
     .setNumFolds(5)
@@ -52,7 +51,7 @@ class GBMClassifierSuite extends FunSuite with DatasetSuiteBase {
 
       val cv = new CrossValidator()
         .setEstimator(rf)
-        .setEvaluator(new MulticlassClassificationEvaluator().setLabelCol(rf.getLabelCol).setPredictionCol(rf.getPredictionCol))
+        .setEvaluator(new MulticlassClassificationEvaluator().setMetricName("accuracy").setLabelCol(rf.getLabelCol).setPredictionCol(rf.getPredictionCol))
         .setEstimatorParamMaps(paramGrid)
         .setNumFolds(5)
         .setParallelism(4)
@@ -62,6 +61,26 @@ class GBMClassifierSuite extends FunSuite with DatasetSuiteBase {
       println(cvModel.avgMetrics.mkString(","))
       print(cvModel.bestModel.asInstanceOf[RandomForestClassificationModel].getSubsamplingRate + ",")
       println(cvModel.bestModel.asInstanceOf[RandomForestClassificationModel].getMaxDepth)
+      println(cvModel.avgMetrics.max)
+    }
+
+
+    time {
+      val paramGrid = new ParamGridBuilder()
+        .addGrid(dc.maxDepth, Array(1, 10, 20))
+        .build()
+
+      val cv = new CrossValidator()
+        .setEstimator(dc)
+        .setEvaluator(new MulticlassClassificationEvaluator().setMetricName("accuracy").setLabelCol(dc.getLabelCol).setPredictionCol(dc.getPredictionCol))
+        .setEstimatorParamMaps(paramGrid)
+        .setNumFolds(5)
+        .setParallelism(4)
+
+      val cvModel = cv.fit(data)
+
+      println(cvModel.avgMetrics.mkString(","))
+      println(cvModel.bestModel.asInstanceOf[DecisionTreeClassificationModel].getMaxDepth)
       println(cvModel.avgMetrics.max)
     }
   }
