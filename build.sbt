@@ -21,6 +21,7 @@ lazy val ScalaTestVersion = "3.0.5"
 lazy val ScalaCheckVersion = "1.14.0"
 lazy val SparkTestingBaseVersion = "0.12.0"
 
+libraryDependencies += "org.apache.spark" %% "spark-core" % SparkVersion % Provided
 libraryDependencies += "org.apache.spark" %% "spark-sql" % SparkVersion % Provided
 libraryDependencies += "org.apache.spark" %% "spark-mllib" % SparkVersion % Provided
 
