@@ -4,7 +4,7 @@ scalaVersion := "2.12.8"
 inThisBuild(
   List(
     organization := "com.github.pierrenodet",
-    homepage := Some(url(s"https://github.com/pierrenodet/$name")),
+    homepage := Some(url(s"https://github.com/pierrenodet/spark-ensemble")),
     licenses := List("Apache-2.0" -> url("http://www.apache.org/licenses/LICENSE-2.0")),
     developers := List(
       Developer(
@@ -33,7 +33,3 @@ libraryDependencies += "org.scalacheck" %% "scalacheck" % ScalaCheckVersion % Te
 fork in Test := true
 parallelExecution in Test := false
 javaOptions ++= Seq("-Xms512M", "-Xmx2048M", "-XX:MaxPermSize=2048M", "-XX:+CMSClassUnloadingEnabled")
-
-artifactName := { (sv: ScalaVersion, module: ModuleID, artifact: Artifact) =>
-  artifact.name + "_" + sv.binary + "-" + SparkVersion + "_" + module.revision + "." + artifact.extension
-}
