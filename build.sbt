@@ -1,8 +1,6 @@
-name := "spark-ensemble"
-scalaVersion := "2.12.8"
-
 inThisBuild(
   List(
+    name := "spark-ensemble",
     organization := "com.github.pierrenodet",
     homepage := Some(url(s"https://github.com/pierrenodet/spark-ensemble")),
     licenses := List("Apache-2.0" -> url("http://www.apache.org/licenses/LICENSE-2.0")),
@@ -12,7 +10,8 @@ inThisBuild(
         "Pierre Nodet",
         "nodet.pierre@gmail.com",
         url("https://github.com/pierrenodet"))
-    )
+    ),
+    crossScalaVersions := List("2.12.8", "2.11.12")
   )
 )
 
