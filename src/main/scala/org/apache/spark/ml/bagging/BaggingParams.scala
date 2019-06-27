@@ -10,4 +10,8 @@ trait BaggingParams
     with HasParallelism
     with HasWeightCol
     with HasBaseLearner
-    with SubSpaceParams {}
+    with SubSpaceParams {
+
+  setDefault(maxIter -> 10)
+        
+}
