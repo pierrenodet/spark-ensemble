@@ -9,4 +9,8 @@ trait BoostingParams
     with HasWeightCol
     with HasSeed
     with HasBaseLearner
-    with HasLearningRate {}
+    with HasLearningRate {
+
+  setDefault(maxIter -> 10)
+  setDefault(learningRate -> 0.1)
+}

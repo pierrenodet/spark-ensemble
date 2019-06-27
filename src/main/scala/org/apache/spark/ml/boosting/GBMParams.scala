@@ -14,4 +14,6 @@ trait GBMParams
     with HasTol {
 
   setDefault(tol -> 1E-3)
+  setDefault(maxIter -> 10)
+  setDefault(learningRate -> 1)
 }
