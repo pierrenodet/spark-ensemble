@@ -18,8 +18,6 @@ trait HasLearningRate extends Params {
   /** @group getParam */
   def getLearningRate: Double = $(learningRate)
 
-  setDefault(learningRate -> 0.5)
-
 }
 
 trait HasBaseLearner extends Params {

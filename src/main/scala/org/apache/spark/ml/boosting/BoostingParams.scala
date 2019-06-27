@@ -12,5 +12,5 @@ trait BoostingParams
     with HasLearningRate {
 
   setDefault(maxIter -> 10)
-        
+  setDefault(learningRate -> 0.1)
 }

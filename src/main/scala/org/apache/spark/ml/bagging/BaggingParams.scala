@@ -13,5 +13,4 @@ trait BaggingParams
     with SubSpaceParams {
 
   setDefault(maxIter -> 10)
-        
 }
