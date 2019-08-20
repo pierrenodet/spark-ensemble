@@ -1,6 +1,11 @@
 package org.apache.spark.ml
 
-import org.apache.spark.ml.classification.{ClassificationModel, Classifier, ProbabilisticClassificationModel, ProbabilisticClassifier}
+import org.apache.spark.ml.classification.{
+  ClassificationModel,
+  Classifier,
+  ProbabilisticClassificationModel,
+  ProbabilisticClassifier
+}
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.regression.{RegressionModel, Regressor}
 

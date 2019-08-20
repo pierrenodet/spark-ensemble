@@ -560,7 +560,10 @@ object GBMRegressionModel extends MLReadable[GBMRegressionModel] {
       val boostsData = (0 until numModels).toArray.map { idx =>
         val dataPath = new Path(path, s"data-$idx").toString
         val data = sparkSession.read.json(dataPath).select("weight", "subspace", "const").head()
-        (data.getAs[Double](0), data.getAs[Seq[Long]](1).map(_.toInt).toArray, data.getAs[Double](2))
+        (
+          data.getAs[Double](0),
+          data.getAs[Seq[Long]](1).map(_.toInt).toArray,
+          data.getAs[Double](2))
       }.unzip3
       val bcModel =
         new GBMRegressionModel(

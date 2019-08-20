@@ -20,7 +20,6 @@ object bfunctions {
 
   def poisson_n(lambda: Double, seed: Long) = Column(PoissonN(lambda, seed))
 
-
   def slice(x: Column, start: Column, length: Column): Column =
     Column(Slice(x.expr, start.expr, length.expr))
 

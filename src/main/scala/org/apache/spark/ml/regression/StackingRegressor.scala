@@ -2,7 +2,12 @@ package org.apache.spark.ml.regression
 
 import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
-import org.apache.spark.ml.ensemble.{EnsemblePredictionModelType, EnsemblePredictorType, HasBaseLearners, HasStacker}
+import org.apache.spark.ml.ensemble.{
+  EnsemblePredictionModelType,
+  EnsemblePredictorType,
+  HasBaseLearners,
+  HasStacker
+}
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.shared.HasWeightCol
