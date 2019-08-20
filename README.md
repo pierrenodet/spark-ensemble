@@ -1,4 +1,4 @@
-# Ensemble Estimators for Apache Spark
+# Ensemble Learning for Apache Spark
 [![Build Status](https://travis-ci.com/pierrenodet/spark-ensemble.svg?branch=master)](https://travis-ci.com/pierrenodet/spark-ensemble)
 [![codecov](https://codecov.io/gh/pierrenodet/spark-ensemble/branch/master/graph/badge.svg)](https://codecov.io/gh/pierrenodet/spark-ensemble)
 [![Gitter](https://badges.gitter.im/spark-ensemble/community.svg)](https://gitter.im/spark-ensemble/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
@@ -7,6 +7,6 @@
 
 <img alt="Saruman! A wizard should know better!" align="right" src="spark-ensemble.jpg" width="312" height="239"/>
 
-Library of Meta-Estimators à la scikit-learn for Ensemble Learning for Apache Spark ML
+Library of Meta-Estimators à la scikit-learn for Ensemble Learning for Apache Spark MLLib
 
 <p align="center"><a href="https://pierrenodet.github.io/spark-ensemble"><B>microsite</B></a></p>

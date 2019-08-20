@@ -90,8 +90,7 @@ class Index extends React.Component {
             <div className="mainContainer">
               <div className="index">
                 <MarkdownBlock>{index}</MarkdownBlock>
-                                <p>Library of Meta-Estimators à la scikit-learn for Ensemble Learning for Apache Spark ML</p>
-
+                <p>Library of Meta-Estimators à la scikit-learn for Ensemble Learning for Apache Spark MLLib</p>
               </div>
             </div>
           </div>
