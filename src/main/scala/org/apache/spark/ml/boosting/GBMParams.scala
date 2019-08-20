@@ -16,7 +16,6 @@ import org.apache.spark.sql.functions._
 
 trait GBMParams
     extends PredictorParams
-    with HasWeightCol
     with HasLearningRate
     with HasMaxIter
     with BoostingParams

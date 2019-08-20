@@ -1,15 +1,8 @@
 package org.apache.spark.ml.boosting
-import java.util.UUID
-
 import org.apache.commons.math3.distribution.PoissonDistribution
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.classification.BoostingClassificationModel
-import org.apache.spark.ml.ensemble.{
-  EnsemblePredictionModelType,
-  HasBaseLearner,
-  HasNumBaseLearners,
-  HasNumRound
-}
+import org.apache.spark.ml.ensemble.{EnsemblePredictionModelType, HasBaseLearner, HasNumBaseLearners, HasNumRound}
 import org.apache.spark.ml.param.shared.{HasSeed, HasTol, HasValidationIndicatorCol, HasWeightCol}
 import org.apache.spark.ml.regression.BoostingRegressionModel
 import org.apache.spark.ml.util.Instrumentation

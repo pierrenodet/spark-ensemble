@@ -13,4 +13,5 @@ trait BaggingParams
     with HasSubBag {
 
   setDefault(numBaseLearners -> 10)
+
 }
