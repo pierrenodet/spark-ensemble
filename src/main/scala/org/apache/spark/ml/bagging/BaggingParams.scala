@@ -1,16 +1,17 @@
 package org.apache.spark.ml.bagging
 
 import org.apache.spark.ml.PredictorParams
-import org.apache.spark.ml.ensemble.{HasBaseLearner, SubSpaceParams}
-import org.apache.spark.ml.param.shared.{HasMaxIter, HasParallelism, HasWeightCol}
+import org.apache.spark.ml.ensemble.{HasBaseLearner, HasNumBaseLearners, HasSubBag}
+import org.apache.spark.ml.param.shared.{HasParallelism, HasWeightCol}
 
 trait BaggingParams
     extends PredictorParams
-    with HasMaxIter
+    with HasNumBaseLearners
     with HasParallelism
     with HasWeightCol
     with HasBaseLearner
-    with SubSpaceParams {
+    with HasSubBag {
 
-  setDefault(maxIter -> 10)
+  setDefault(numBaseLearners -> 10)
+
 }

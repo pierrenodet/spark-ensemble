@@ -9,6 +9,8 @@ import org.apache.spark.ml.classification.{
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.regression.{RegressionModel, Regressor}
 
+import scala.language.existentials
+
 package object ensemble {
 
   type EnsemblePredictorType = Predictor[Vector, E, M] forSome {

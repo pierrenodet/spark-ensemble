@@ -3,7 +3,7 @@ package org.apache.spark.ml.util
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.sql.types.StructField
 
-object BaggingMetadataUtils {
+private[spark] object BaggingMetadataUtils {
 
   def getNumFeatures(featuresSchema: StructField): Option[Int] = {
     val metadata = AttributeGroup.fromStructField(featuresSchema)
