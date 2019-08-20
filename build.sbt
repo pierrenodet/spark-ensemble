@@ -43,11 +43,16 @@ lazy val core = project
       "org.scalatest" %% "scalatest" % ScalaTestVersion,
       "org.scalacheck" %% "scalacheck" % ScalaCheckVersion).map(_ % Test))
 
+
 lazy val docs = project
-  .in(file("docs"))
+  .in(file("spark-ensemble-docs"))
   .settings(
     moduleName := "spark-ensemble-docs",
-    mdocVariables := Map("VERSION" -> version.value)
+    mdocVariables := Map("VERSION" -> version.value),
+    unidocProjectFilter in (ScalaUnidoc, unidoc) := inProjects(core),
+    target in (ScalaUnidoc, unidoc) := (baseDirectory in LocalRootProject).value / "website" / "static" / "api",
+    cleanFiles += (target in (ScalaUnidoc, unidoc)).value,
+    docusaurusCreateSite := docusaurusCreateSite.dependsOn(unidoc in Compile).value,
   )
   .dependsOn(core)
-  .enablePlugins(MdocPlugin,DocusaurusPlugin)
+  .enablePlugins(MdocPlugin, DocusaurusPlugin,ScalaUnidocPlugin)
