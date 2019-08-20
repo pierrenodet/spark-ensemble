@@ -10,3 +10,6 @@ addSbtPlugin("com.geirsson" % "sbt-scalafmt" % SbtScalaFmt)
 
 addSbtPlugin("com.geirsson" % "sbt-ci-release" % SbtCiRelease)
 
+addSbtPlugin("org.scalameta" % "sbt-mdoc" % "1.3.1" )
+
+addSbtPlugin("de.heikoseeberger" % "sbt-header" % "5.2.0") 
