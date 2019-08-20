@@ -42,7 +42,10 @@ import scala.annotation.tailrec
 import scala.concurrent.duration.Duration
 import scala.concurrent.{ExecutionContext, Future}
 
-private[ml] trait GBMClassifierParams extends ClassifierParams with GBMParams with HasParallelism {
+private[ml] trait GBMClassifierParams
+    extends ClassifierParams
+    with GBMParams
+    with HasParallelism {
 
   /**
    * Loss function which Boosting tries to minimize. (case-insensitive)
