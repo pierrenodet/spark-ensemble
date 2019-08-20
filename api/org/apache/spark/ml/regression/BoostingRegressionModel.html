@@ -273,7 +273,7 @@
         <span class="kind">new</span>
       </span>
       <span class="symbol">
-        <span class="name">BoostingRegressionModel</span><span class="params">(<span name="weights">weights: <span class="extype" name="scala.Array">Array</span>[<span class="extype" name="scala.Double">Double</span>]</span>, <span name="models">models: <span class="extype" name="scala.Array">Array</span>[<a href="../ensemble/index.html#EnsemblePredictionModelType=org.apache.spark.ml.PredictionModel[org.apache.spark.ml.linalg.Vector,M]forSome{typeM&lt;:org.apache.spark.ml.PredictionModel[org.apache.spark.ml.linalg.Vector,M]}" class="extmbr" name="org.apache.spark.ml.ensemble.EnsemblePredictionModelType">EnsemblePredictionModelType</a>]</span>)</span>
+        <span class="name">BoostingRegressionModel</span><span class="params">(<span name="weights">weights: <span class="extype" name="scala.Array">Array</span>[<span class="extype" name="scala.Double">Double</span>]</span>, <span name="models">models: <span class="extype" name="scala.Array">Array</span>[<span class="extype" name="org.apache.spark.ml.ensemble.EnsemblePredictionModelType">EnsemblePredictionModelType</span>]</span>)</span>
       </span>
       
       
@@ -289,7 +289,7 @@
         <span class="kind">new</span>
       </span>
       <span class="symbol">
-        <span class="name">BoostingRegressionModel</span><span class="params">(<span name="uid">uid: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="weights">weights: <span class="extype" name="scala.Array">Array</span>[<span class="extype" name="scala.Double">Double</span>]</span>, <span name="models">models: <span class="extype" name="scala.Array">Array</span>[<a href="../ensemble/index.html#EnsemblePredictionModelType=org.apache.spark.ml.PredictionModel[org.apache.spark.ml.linalg.Vector,M]forSome{typeM&lt;:org.apache.spark.ml.PredictionModel[org.apache.spark.ml.linalg.Vector,M]}" class="extmbr" name="org.apache.spark.ml.ensemble.EnsemblePredictionModelType">EnsemblePredictionModelType</a>]</span>)</span>
+        <span class="name">BoostingRegressionModel</span><span class="params">(<span name="uid">uid: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="weights">weights: <span class="extype" name="scala.Array">Array</span>[<span class="extype" name="scala.Double">Double</span>]</span>, <span name="models">models: <span class="extype" name="scala.Array">Array</span>[<span class="extype" name="org.apache.spark.ml.ensemble.EnsemblePredictionModelType">EnsemblePredictionModelType</span>]</span>)</span>
       </span>
       
       
@@ -411,7 +411,7 @@
         <span class="kind">val</span>
       </span>
       <span class="symbol">
-        <span class="name">baseLearner</span><span class="result">: <span class="extype" name="org.apache.spark.ml.param.Param">Param</span>[<a href="../ensemble/index.html#EnsemblePredictorType=org.apache.spark.ml.Predictor[org.apache.spark.ml.linalg.Vector,E,M]forSome{typeM&lt;:org.apache.spark.ml.PredictionModel[org.apache.spark.ml.linalg.Vector,M];typeE&lt;:org.apache.spark.ml.Predictor[org.apache.spark.ml.linalg.Vector,E,M]}" class="extmbr" name="org.apache.spark.ml.ensemble.EnsemblePredictorType">EnsemblePredictorType</a>]</span>
+        <span class="name">baseLearner</span><span class="result">: <span class="extype" name="org.apache.spark.ml.param.Param">Param</span>[<span class="extype" name="org.apache.spark.ml.ensemble.EnsemblePredictorType">EnsemblePredictorType</span>]</span>
       </span>
       
       <p class="shortcomment cmt">param for the estimator that will be used by the ensemble learner as a base learner
@@ -565,7 +565,7 @@
         <span class="kind">def</span>
       </span>
       <span class="symbol">
-        <span class="name">evaluateOnValidation</span><span class="params">(<span name="numClasses">numClasses: <span class="extype" name="scala.Int">Int</span></span>, <span name="weights">weights: <span class="extype" name="scala.Array">Array</span>[<span class="extype" name="scala.Double">Double</span>]</span>, <span name="boosters">boosters: <span class="extype" name="scala.Array">Array</span>[<a href="../ensemble/index.html#EnsemblePredictionModelType=org.apache.spark.ml.PredictionModel[org.apache.spark.ml.linalg.Vector,M]forSome{typeM&lt;:org.apache.spark.ml.PredictionModel[org.apache.spark.ml.linalg.Vector,M]}" class="extmbr" name="org.apache.spark.ml.ensemble.EnsemblePredictionModelType">EnsemblePredictionModelType</a>]</span>, <span name="labelColName">labelColName: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="featuresColName">featuresColName: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="loss">loss: (<span class="extype" name="scala.Double">Double</span>) ⇒ <span class="extype" name="scala.Double">Double</span></span>)</span><span class="params">(<span name="df">df: <a href="../../sql/index.html#DataFrame=org.apache.spark.sql.Dataset[org.apache.spark.sql.Row]" class="extmbr" name="org.apache.spark.sql.DataFrame">DataFrame</a></span>)</span><span class="result">: <span class="extype" name="scala.Double">Double</span></span>
+        <span class="name">evaluateOnValidation</span><span class="params">(<span name="numClasses">numClasses: <span class="extype" name="scala.Int">Int</span></span>, <span name="weights">weights: <span class="extype" name="scala.Array">Array</span>[<span class="extype" name="scala.Double">Double</span>]</span>, <span name="boosters">boosters: <span class="extype" name="scala.Array">Array</span>[<span class="extype" name="org.apache.spark.ml.ensemble.EnsemblePredictionModelType">EnsemblePredictionModelType</span>]</span>, <span name="labelColName">labelColName: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="featuresColName">featuresColName: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="loss">loss: (<span class="extype" name="scala.Double">Double</span>) ⇒ <span class="extype" name="scala.Double">Double</span></span>)</span><span class="params">(<span name="df">df: <a href="../../sql/index.html#DataFrame=org.apache.spark.sql.Dataset[org.apache.spark.sql.Row]" class="extmbr" name="org.apache.spark.sql.DataFrame">DataFrame</a></span>)</span><span class="result">: <span class="extype" name="scala.Double">Double</span></span>
       </span>
       
       <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>BoostingParams</dd></dl></div>
@@ -581,7 +581,7 @@
         <span class="kind">def</span>
       </span>
       <span class="symbol">
-        <span class="name">evaluateOnValidation</span><span class="params">(<span name="weights">weights: <span class="extype" name="scala.Array">Array</span>[<span class="extype" name="scala.Double">Double</span>]</span>, <span name="boosters">boosters: <span class="extype" name="scala.Array">Array</span>[<a href="../ensemble/index.html#EnsemblePredictionModelType=org.apache.spark.ml.PredictionModel[org.apache.spark.ml.linalg.Vector,M]forSome{typeM&lt;:org.apache.spark.ml.PredictionModel[org.apache.spark.ml.linalg.Vector,M]}" class="extmbr" name="org.apache.spark.ml.ensemble.EnsemblePredictionModelType">EnsemblePredictionModelType</a>]</span>, <span name="labelColName">labelColName: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="featuresColName">featuresColName: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="loss">loss: (<span class="extype" name="scala.Double">Double</span>) ⇒ <span class="extype" name="scala.Double">Double</span></span>)</span><span class="params">(<span name="df">df: <a href="../../sql/index.html#DataFrame=org.apache.spark.sql.Dataset[org.apache.spark.sql.Row]" class="extmbr" name="org.apache.spark.sql.DataFrame">DataFrame</a></span>)</span><span class="result">: <span class="extype" name="scala.Double">Double</span></span>
+        <span class="name">evaluateOnValidation</span><span class="params">(<span name="weights">weights: <span class="extype" name="scala.Array">Array</span>[<span class="extype" name="scala.Double">Double</span>]</span>, <span name="boosters">boosters: <span class="extype" name="scala.Array">Array</span>[<span class="extype" name="org.apache.spark.ml.ensemble.EnsemblePredictionModelType">EnsemblePredictionModelType</span>]</span>, <span name="labelColName">labelColName: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="featuresColName">featuresColName: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="loss">loss: (<span class="extype" name="scala.Double">Double</span>) ⇒ <span class="extype" name="scala.Double">Double</span></span>)</span><span class="params">(<span name="df">df: <a href="../../sql/index.html#DataFrame=org.apache.spark.sql.Dataset[org.apache.spark.sql.Row]" class="extmbr" name="org.apache.spark.sql.DataFrame">DataFrame</a></span>)</span><span class="result">: <span class="extype" name="scala.Double">Double</span></span>
       </span>
       
       <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>BoostingParams</dd></dl></div>
@@ -731,7 +731,7 @@
         <span class="kind">def</span>
       </span>
       <span class="symbol">
-        <span class="name">fitBaseLearner</span><span class="params">(<span name="baseLearner">baseLearner: <a href="../ensemble/index.html#EnsemblePredictorType=org.apache.spark.ml.Predictor[org.apache.spark.ml.linalg.Vector,E,M]forSome{typeM&lt;:org.apache.spark.ml.PredictionModel[org.apache.spark.ml.linalg.Vector,M];typeE&lt;:org.apache.spark.ml.Predictor[org.apache.spark.ml.linalg.Vector,E,M]}" class="extmbr" name="org.apache.spark.ml.ensemble.EnsemblePredictorType">EnsemblePredictorType</a></span>, <span name="labelColName">labelColName: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="featuresColName">featuresColName: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="predictionColName">predictionColName: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="weightColName">weightColName: <span class="extype" name="scala.Option">Option</span>[<span class="extype" name="scala.Predef.String">String</span>]</span>)</span><span class="params">(<span name="df">df: <a href="../../sql/index.html#DataFrame=org.apache.spark.sql.Dataset[org.apache.spark.sql.Row]" class="extmbr" name="org.apache.spark.sql.DataFrame">DataFrame</a></span>)</span><span class="result">: <a href="../ensemble/index.html#EnsemblePredictionModelType=org.apache.spark.ml.PredictionModel[org.apache.spark.ml.linalg.Vector,M]forSome{typeM&lt;:org.apache.spark.ml.PredictionModel[org.apache.spark.ml.linalg.Vector,M]}" class="extmbr" name="org.apache.spark.ml.ensemble.EnsemblePredictionModelType">EnsemblePredictionModelType</a></span>
+        <span class="name">fitBaseLearner</span><span class="params">(<span name="baseLearner">baseLearner: <span class="extype" name="org.apache.spark.ml.ensemble.EnsemblePredictorType">EnsemblePredictorType</span></span>, <span name="labelColName">labelColName: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="featuresColName">featuresColName: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="predictionColName">predictionColName: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="weightColName">weightColName: <span class="extype" name="scala.Option">Option</span>[<span class="extype" name="scala.Predef.String">String</span>]</span>)</span><span class="params">(<span name="df">df: <a href="../../sql/index.html#DataFrame=org.apache.spark.sql.Dataset[org.apache.spark.sql.Row]" class="extmbr" name="org.apache.spark.sql.DataFrame">DataFrame</a></span>)</span><span class="result">: <span class="extype" name="org.apache.spark.ml.ensemble.EnsemblePredictionModelType">EnsemblePredictionModelType</span></span>
       </span>
       
       <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>HasBaseLearner</dd></dl></div>
@@ -763,7 +763,7 @@
         <span class="kind">def</span>
       </span>
       <span class="symbol">
-        <span class="name">getBaseLearner</span><span class="result">: <a href="../ensemble/index.html#EnsemblePredictorType=org.apache.spark.ml.Predictor[org.apache.spark.ml.linalg.Vector,E,M]forSome{typeM&lt;:org.apache.spark.ml.PredictionModel[org.apache.spark.ml.linalg.Vector,M];typeE&lt;:org.apache.spark.ml.Predictor[org.apache.spark.ml.linalg.Vector,E,M]}" class="extmbr" name="org.apache.spark.ml.ensemble.EnsemblePredictorType">EnsemblePredictorType</a></span>
+        <span class="name">getBaseLearner</span><span class="result">: <span class="extype" name="org.apache.spark.ml.ensemble.EnsemblePredictorType">EnsemblePredictorType</span></span>
       </span>
       
       <p class="shortcomment cmt"></p><div class="fullcomment"><div class="comment cmt"></div><dl class="attributes block"> <dt>Definition Classes</dt><dd>HasBaseLearner</dd></dl></div>
@@ -1396,7 +1396,7 @@ Supported: &quot;exponential&quot;
         <span class="kind">val</span>
       </span>
       <span class="symbol">
-        <span class="name">models</span><span class="result">: <span class="extype" name="scala.Array">Array</span>[<a href="../ensemble/index.html#EnsemblePredictionModelType=org.apache.spark.ml.PredictionModel[org.apache.spark.ml.linalg.Vector,M]forSome{typeM&lt;:org.apache.spark.ml.PredictionModel[org.apache.spark.ml.linalg.Vector,M]}" class="extmbr" name="org.apache.spark.ml.ensemble.EnsemblePredictionModelType">EnsemblePredictionModelType</a>]</span>
+        <span class="name">models</span><span class="result">: <span class="extype" name="scala.Array">Array</span>[<span class="extype" name="org.apache.spark.ml.ensemble.EnsemblePredictionModelType">EnsemblePredictionModelType</span>]</span>
       </span>
       
       
