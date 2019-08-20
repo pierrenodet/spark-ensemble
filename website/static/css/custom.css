@@ -1,5 +1,3 @@
-/* your custom css */
-
 @media only screen and (min-device-width: 360px) and (max-device-width: 736px) {
 }
 
@@ -16,7 +14,22 @@
 }
 
 .mainContainer .index {
+  border-top: 0;
   margin: 0 auto;
   max-width: 650px;
   padding: 0 10px;
 }
+
+.projectTitleLogo {
+  width: 70px;
+  padding: 0 10px;
+  vertical-align: middle;
+}
+
+.nav-footer .separator {
+  width: 350px;
+  margin: 0 auto;
+  margin-bottom: 10px;
+  border-top: 0;
+}
+

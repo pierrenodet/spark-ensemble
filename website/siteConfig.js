@@ -19,9 +19,9 @@ const siteConfig = {
     { href: repoUrl, label: "GitHub" }
   ],
 
-  headerIcon: "img/wood-white.svg",
-  titleIcon: "img/wood.svg",
-  favicon: "img/wood.png",
+  headerIcon: "img/wood-color.svg",
+  titleIcon: "img/wood-color.svg",
+  favicon: "img/wood-color.png",
 
   colors: {
     primaryColor: '#443e8a',
