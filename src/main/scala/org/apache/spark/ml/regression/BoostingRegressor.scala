@@ -1,3 +1,19 @@
+/*
+ * Copyright 2019 Pierre Nodet
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.ml.regression
 
 import java.util.{Locale, UUID}
@@ -112,7 +128,19 @@ class BoostingRegressor(override val uid: String)
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
   /** @group setParam */
+  def setSeed(value: Long): this.type = set(seed, value)
+
+  /** @group setParam */
   def setLoss(value: String): this.type = set(loss, value)
+
+  /** @group setParam */
+  def setValidationIndicatorCol(value: String): this.type = set(validationIndicatorCol, value)
+
+  /** @group setParam */
+  def setTol(value: Double): this.type = set(tol, value)
+
+  /** @group setParam */
+  def setNumRound(value: Int): this.type = set(numRound, value)
 
   def this() = this(Identifiable.randomUID("BoostingRegressor"))
 

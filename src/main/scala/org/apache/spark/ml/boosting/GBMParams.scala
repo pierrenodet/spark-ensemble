@@ -1,7 +1,28 @@
+/*
+ * Copyright 2019 Pierre Nodet
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.ml.boosting
 
 import breeze.linalg.{DenseVector => BreezeDV}
-import breeze.optimize.{ApproximateGradientFunction, CachedDiffFunction, LBFGSB => BreezeLBFGSB}
+import breeze.optimize.{
+  ApproximateGradientFunction,
+  CachedDiffFunction,
+  DiffFunction,
+  LBFGSB => BreezeLBFGSB
+}
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.classification.GBMClassificationModel
 import org.apache.spark.ml.ensemble.HasSubBag.SubSpace
@@ -56,8 +77,8 @@ trait GBMParams
       .select(col(labelColName), col(predictionColName))
       .cache()
 
-    val cdf = new CachedDiffFunction[BreezeDV[Double]]({ denseVector: BreezeDV[Double] =>
-      {
+    val cdf = new CachedDiffFunction[BreezeDV[Double]](new DiffFunction[BreezeDV[Double]] {
+      override def calculate(denseVector: BreezeDV[Double]): (Double, BreezeDV[Double]) = {
         val x = denseVector(0)
         val df = transformed
         val l = loss
@@ -68,9 +89,8 @@ trait GBMParams
         val gudf = udf[Double, Double, Double]((label: Double, prediction: Double) =>
           g(label, x * prediction) * prediction)
         val lcn = labelColName
-        val pcn = predictionColName
         val res = df
-          .agg(sum(ludf(col(lcn), col(pcn))), sum(gudf(col(lcn), col(pcn))))
+          .agg(sum(ludf(col(lcn), lit(1))), sum(gudf(col(lcn), lit(1))))
           .first()
         (res.getDouble(0), BreezeDV[Double](Array(res.getDouble(1))))
       }
@@ -155,8 +175,8 @@ trait GBMParams
       .select(col(labelColName))
       .cache()
 
-    val cdf = new CachedDiffFunction[BreezeDV[Double]]({ denseVector: BreezeDV[Double] =>
-      {
+    val cdf = new CachedDiffFunction[BreezeDV[Double]](new DiffFunction[BreezeDV[Double]] {
+      override def calculate(denseVector: BreezeDV[Double]): (Double, BreezeDV[Double]) = {
         val x = denseVector(0)
         val df = transformed
         val l = loss

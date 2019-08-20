@@ -5,8 +5,24 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/pierrenodet/spark-ensemble/blob/master/LICENSE)
 [![Maven Central](https://img.shields.io/maven-central/v/com.github.pierrenodet/spark-ensemble_2.12.svg?label=maven-central&colorB=blue)](https://search.maven.org/search?q=g:%22com.github.pierrenodet%22%20AND%20a:%22spark-ensemble_2.12%22)
 
-<img alt="Saruman ! A wizard should know better!" align="right" src="spark-ensemble.jpg" width="312" height="239"/>
-
 Library of Meta-Estimators à la scikit-learn for Ensemble Learning for Apache Spark ML
 
-<p style="text-align:center;"><a href="https://pierrenodet.github.io/spark-ensemble"><B>microsite</B></a></p>
+## Getting Started
+
+Download the dependency from Maven Central
+
+**SBT**
+
+```scala
+libraryDependencies += "com.github.pierrenodet" %% "spark-ensemble" % "@VERSION@"
+```
+
+**Maven**
+
+```maven-pom
+<dependency>
+  <groupId>com.github.pierrenodet</groupId>
+  <artifactId>spark-ensemble_2.12</artifactId>
+  <version>@VERSION@</version>
+</dependency>
+```
