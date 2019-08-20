@@ -9,25 +9,31 @@ class BaggingClassifierSuite extends FunSuite with DatasetSuiteBase {
 
   test("benchmark") {
 
-    val raw = spark.read.format("libsvm").load("src/test/resources/data/vehicle/train.scale")
+    val raw = spark.read.format("libsvm").load("src/test/resources/data/vehicle/vehicle.svm")
 
-    val br = new BaggingClassifier().setBaseLearner(new DecisionTreeClassifier()).setMaxIter(10).setParallelism(4)
+    val br = new BaggingClassifier()
+      .setBaseLearner(new DecisionTreeClassifier())
+      .setNumBaseLearners(10)
+      .setParallelism(4)
     val rf = new RandomForestClassifier().setNumTrees(10)
+
+    val mce = new MulticlassClassificationEvaluator()
+      .setLabelCol("label")
+      .setPredictionCol("prediction")
 
     val data = raw
     data.cache()
 
     time {
       val brParamGrid = new ParamGridBuilder()
-        .addGrid(br.sampleRatioFeatures, Array(0.3,0.7,1))
-        .addGrid(br.replacementFeatures, Array(x = false))
+        .addGrid(br.subspaceRatio, Array(0.7, 1))
         .addGrid(br.replacement, Array(true, false))
-        .addGrid(br.sampleRatio, Array(0.3, 0.7, 1))
+        .addGrid(br.sampleRatio, Array(0.7, 1))
         .build()
 
       val brCV = new CrossValidator()
         .setEstimator(br)
-        .setEvaluator(new MulticlassClassificationEvaluator().setLabelCol(br.getLabelCol).setPredictionCol(br.getPredictionCol))
+        .setEvaluator(mce)
         .setEstimatorParamMaps(brParamGrid)
         .setNumFolds(5)
         .setParallelism(4)
@@ -37,9 +43,13 @@ class BaggingClassifierSuite extends FunSuite with DatasetSuiteBase {
       println(brCVModel.avgMetrics.mkString(","))
       print(brCVModel.bestModel.asInstanceOf[BaggingClassificationModel].getReplacement + ",")
       print(brCVModel.bestModel.asInstanceOf[BaggingClassificationModel].getSampleRatio + ",")
-      print(brCVModel.bestModel.asInstanceOf[BaggingClassificationModel].getReplacementFeatures + ",")
-      println(brCVModel.bestModel.asInstanceOf[BaggingClassificationModel].getSampleRatioFeatures)
+      println(brCVModel.bestModel.asInstanceOf[BaggingClassificationModel].getSubspaceRatio)
       println(brCVModel.avgMetrics.max)
+
+      val bm = brCVModel.bestModel.asInstanceOf[BaggingClassificationModel]
+      bm.write.overwrite().save("/tmp/bonjour")
+      val loaded = BaggingClassificationModel.load("/tmp/bonjour")
+      assert(mce.evaluate(loaded.transform(data)) == mce.evaluate(bm.transform(data)))
 
     }
 
@@ -50,7 +60,7 @@ class BaggingClassifierSuite extends FunSuite with DatasetSuiteBase {
 
       val cv = new CrossValidator()
         .setEstimator(rf)
-        .setEvaluator(new MulticlassClassificationEvaluator().setLabelCol(rf.getLabelCol).setPredictionCol(rf.getPredictionCol))
+        .setEvaluator(mce)
         .setEstimatorParamMaps(paramGrid)
         .setNumFolds(5)
         .setParallelism(4)

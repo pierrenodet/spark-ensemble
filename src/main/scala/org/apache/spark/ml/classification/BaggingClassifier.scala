@@ -1,23 +1,23 @@
 package org.apache.spark.ml.classification
 
-import org.apache.commons.math3.stat.StatUtils
+import java.util.UUID
+
 import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.bagging._
+import org.apache.spark.ml.ensemble.HasSubBag.SubSpace
 import org.apache.spark.ml.ensemble.{
   EnsemblePredictionModelType,
   EnsemblePredictorType,
   HasBaseLearner
 }
-import org.apache.spark.ml.feature.Instance
-import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.param.{ParamMap, ParamPair}
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.{PredictionModel, Predictor}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.functions.{col, lit}
-import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.Dataset
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ThreadUtils
 import org.json4s.JsonDSL._
@@ -85,13 +85,10 @@ class BaggingClassifier(override val uid: String)
   def setSampleRatio(value: Double): this.type = set(sampleRatio, value)
 
   /** @group setParam */
-  def setReplacementFeatures(value: Boolean): this.type = set(replacementFeatures, value)
+  def setSubspaceRatio(value: Double): this.type = set(subspaceRatio, value)
 
   /** @group setParam */
-  def setSampleRatioFeatures(value: Double): this.type = set(sampleRatioFeatures, value)
-
-  /** @group setParam */
-  def setMaxIter(value: Int): this.type = set(maxIter, value)
+  def setNumBaseLearners(value: Int): this.type = set(numBaseLearners, value)
 
   /**
    * Set the maximum level of parallelism to evaluate models in parallel.
@@ -111,75 +108,79 @@ class BaggingClassifier(override val uid: String)
     instr =>
       instr.logPipelineStage(this)
       instr.logDataset(dataset)
-      instr.logParams(this, maxIter, seed, parallelism)
+      instr.logParams(
+        this,
+        labelCol,
+        weightCol,
+        featuresCol,
+        predictionCol,
+        numBaseLearners,
+        sampleRatio,
+        replacement,
+        subspaceRatio,
+        seed)
 
-      val spark = dataset.sparkSession
+      val weightColIsUsed = isDefined(weightCol) && $(weightCol).nonEmpty && {
+        getBaseLearner match {
+          case _: HasWeightCol => true
+          case c =>
+            instr.logWarning(s"weightCol is ignored, as it is not supported by $c now.")
+            false
+        }
+      }
 
-      val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
-      if (!isDefined(weightCol) || $(weightCol).isEmpty) setWeightCol("weight")
+      val df = if (weightColIsUsed) {
+        dataset.select($(labelCol), $(weightCol), $(featuresCol))
+      } else {
+        dataset.select($(labelCol), $(featuresCol))
+      }
 
-      val input: RDD[Instance] =
-        dataset
-          .select(col($(labelCol)), w, col($(featuresCol)))
-          .rdd
-          .map {
-            case Row(label: Double, weight: Double, features: Vector) =>
-              Instance(label, weight, features)
-          }
-          .persist(StorageLevel.MEMORY_AND_DISK)
+      val optWeightColName = if (weightColIsUsed) {
+        Some($(weightCol))
+      } else {
+        None
+      }
 
-      val numFeatures = input.first().features.size
+      val handlePersistence = dataset.storageLevel == StorageLevel.NONE && (df.storageLevel == StorageLevel.NONE)
+      if (handlePersistence) {
+        df.persist(StorageLevel.MEMORY_AND_DISK)
+      }
 
-      val baggedInput = BaggedPoint
-        .convertToBaggedRDD(
-          input,
-          getSampleRatio,
-          getMaxIter,
-          getReplacement,
-          (instance: Instance) => instance.weight,
-          getSeed)
+      val bagColName = "gbm$bag" + UUID.randomUUID().toString
+      val bagged = df.transform(
+        withBag(getReplacement, getSampleRatio, getNumBaseLearners, getSeed, bagColName))
 
-      val futureModels = (0 until getMaxIter).map(iter =>
-        Future[Option[(Array[Int], EnsemblePredictionModelType)]] {
+      val numFeatures = getNumFeatures(df, getFeaturesCol)
 
-          val sampled =
-            baggedInput.flatMap(bi => Iterator.fill(bi.subsampleCounts(iter))(bi.datum))
+      val futureModels = Array
+        .range(0, getNumBaseLearners)
+        .map(iter =>
+          Future[(Array[Int], EnsemblePredictionModelType)] {
 
-          val patch =
-            PatchedPoint
-              .patch(getSampleRatioFeatures, numFeatures, getReplacementFeatures, getSeed + iter)
+            val subspace = mkSubspace(getSampleRatio, numFeatures, getSeed + iter)
 
-          if (patch sameElements Array.fill(numFeatures)(0.0)) {
+            val subbag =
+              bagged.transform(extractSubBag(bagColName, iter, getFeaturesCol, subspace))
 
-            //Nothing to learn as no features have been chosen
-            None
+            val bagger =
+              fitBaseLearner(
+                getBaseLearner,
+                getLabelCol,
+                getFeaturesCol,
+                getPredictionCol,
+                optWeightColName)(subbag)
 
-          } else {
+            (subspace, bagger)
 
-            val subspaced = PatchedPoint.convertToPatchedRDD(sampled, patch)
+          }(getExecutionContext))
 
-            val df = spark.createDataFrame(subspaced)
-            instr.logDebug(s"Start training for $iter iteration on $df with $getBaseLearner")
+      val (subspaces, models) = futureModels.map(ThreadUtils.awaitResult(_, Duration.Inf)).unzip
 
-            val paramMap = new ParamMap()
-            paramMap.put(getBaseLearner.labelCol -> "label")
-            paramMap.put(getBaseLearner.featuresCol -> "features")
+      if (handlePersistence) {
+        df.unpersist()
+      }
 
-            val model = getBaseLearner.fit(df, paramMap)
-
-            instr.logDebug(s"Training done for $iter iteration on $df with $getBaseLearner")
-
-            Some(patch, model)
-
-          }
-
-        }(getExecutionContext))
-
-      val models = futureModels.map(f => ThreadUtils.awaitResult(f, Duration.Inf))
-
-      input.unpersist()
-
-      new BaggingClassificationModel(models.flatten.toArray)
+      new BaggingClassificationModel(subspaces, models)
 
   }
 
@@ -219,32 +220,30 @@ object BaggingClassifier extends MLReadable[BaggingClassifier] {
 
 class BaggingClassificationModel(
     override val uid: String,
-    val subSpaces: Array[Array[Int]],
+    val subspaces: Array[SubSpace],
     val models: Array[EnsemblePredictionModelType])
     extends PredictionModel[Vector, BaggingClassificationModel]
     with BaggingClassifierParams
     with MLWritable {
 
   def this(subSpaces: Array[Array[Int]], models: Array[EnsemblePredictionModelType]) =
-    this(Identifiable.randomUID("BaggingRegressionModel"), subSpaces, models)
+    this(Identifiable.randomUID("BaggingClassificationModel"), subSpaces, models)
 
-  def this(tuples: Array[(Array[Int], EnsemblePredictionModelType)]) =
-    this(tuples.map(_._1), tuples.map(_._2))
+  val numBaseModels: Int = models.length
 
   override def predict(features: Vector): Double =
-    StatUtils
-      .mode(subSpaces.zip(models).map {
-        case (subSpace, model) =>
-          val subFeatures =
-            Vectors.dense(features.toArray.zip(subSpace).flatMap {
-              case (f, i) => if (i == 0) None else Some(f)
-            })
-          model.predict(subFeatures)
-      })
-      .head
+    breeze.stats
+      .mode(
+        models
+          .zip(subspaces)
+          .map {
+            case (model, subspace) =>
+              model.predict(slicer(subspace)(features))
+          })
+      .mode
 
   override def copy(extra: ParamMap): BaggingClassificationModel = {
-    val copied = new BaggingClassificationModel(uid, subSpaces, models)
+    val copied = new BaggingClassificationModel(uid, subspaces, models)
     copyValues(copied, extra).setParent(parent)
   }
 
@@ -263,16 +262,17 @@ object BaggingClassificationModel extends MLReadable[BaggingClassificationModel]
       instance: BaggingClassificationModel)
       extends MLWriter {
 
-    private case class Data(subSpace: Array[Int])
+    private case class Data(subspace: SubSpace)
 
     override protected def saveImpl(path: String): Unit = {
-      BaggingClassifierParams.saveImpl(instance, path, sc)
+      val extraJson = "numBaseModels" -> instance.numBaseModels
+      BaggingClassifierParams.saveImpl(instance, path, sc, Some(extraJson))
       instance.models.map(_.asInstanceOf[MLWritable]).zipWithIndex.foreach {
         case (model, idx) =>
           val modelPath = new Path(path, s"model-$idx").toString
           model.save(modelPath)
       }
-      instance.subSpaces.zipWithIndex.foreach {
+      instance.subspaces.zipWithIndex.foreach {
         case (subSpace, idx) =>
           val data = Data(subSpace)
           val dataPath = new Path(path, s"data-$idx").toString
@@ -289,19 +289,20 @@ object BaggingClassificationModel extends MLReadable[BaggingClassificationModel]
 
     override def load(path: String): BaggingClassificationModel = {
       implicit val format: DefaultFormats = DefaultFormats
-      val (metadata, _) = BaggingClassifierParams.loadImpl(path, sc, className)
-      val numModels = metadata.getParamValue("maxIter").extract[Int]
+      val (metadata, baseLearner) = BaggingClassifierParams.loadImpl(path, sc, className)
+      val numModels = (metadata.metadata \ "numBaseModels").extract[Int]
       val models = (0 until numModels).toArray.map { idx =>
         val modelPath = new Path(path, s"model-$idx").toString
         DefaultParamsReader.loadParamsInstance[EnsemblePredictionModelType](modelPath, sc)
       }
-      val subSpaces = (0 until numModels).toArray.map { idx =>
+      val subspaces = (0 until numModels).toArray.map { idx =>
         val dataPath = new Path(path, s"data-$idx").toString
-        val data = sparkSession.read.json(dataPath).select("subSpace").head()
-        data.getAs[Seq[Int]](0).toArray
+        val data = sparkSession.read.json(dataPath).select("subspace").head()
+        data.getAs[Seq[Long]](0).map(_.toInt).toArray
       }
-      val bcModel = new BaggingClassificationModel(metadata.uid, subSpaces, models)
+      val bcModel = new BaggingClassificationModel(metadata.uid, subspaces, models)
       metadata.getAndSetParams(bcModel)
+      bcModel.set("baseLearner", baseLearner)
       bcModel
     }
   }

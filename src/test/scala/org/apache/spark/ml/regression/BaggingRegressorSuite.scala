@@ -2,7 +2,6 @@ package org.apache.spark.ml.regression
 
 import com.holdenkarau.spark.testing.DatasetSuiteBase
 import org.apache.spark.ml.evaluation.RegressionEvaluator
-import org.apache.spark.ml.feature.VectorAssembler
 import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
 import org.scalatest.FunSuite
 
@@ -10,32 +9,38 @@ class BaggingRegressorSuite extends FunSuite with DatasetSuiteBase {
 
   test("benchmark") {
 
-    val raw = spark.read.option("header", "true").option("inferSchema", "true").csv("src/test/resources/data/bostonhousing/train.csv")
-    val test = spark.read.option("header", "true").option("inferSchema", "true").csv("src/test/resources/data/bostonhousing/test.csv")
+    val raw = spark.read.format("libsvm").load("src/test/resources/data/cpusmall/cpusmall.svm")
 
-    val vectorAssembler = new VectorAssembler().setInputCols(raw.columns.filter(x => !x.equals("ID") && !x.equals("medv"))).setOutputCol("features")
     val bl = new DecisionTreeRegressor()
-    val br = new BaggingRegressor().setBaseLearner(bl).setFeaturesCol("features").setLabelCol("medv").setMaxIter(10).setParallelism(4)
-    val rf = new RandomForestRegressor().setFeaturesCol("features").setLabelCol("medv").setNumTrees(10)
+    val br = new BaggingRegressor()
+      .setBaseLearner(bl)
+      .setParallelism(4)
+    val rf =
+      new RandomForestRegressor().setNumTrees(10)
 
-    val data = vectorAssembler.transform(raw)
-    data.count()
+    val re = new RegressionEvaluator()
+      .setLabelCol("label")
+      .setPredictionCol("prediction")
+      .setMetricName("rmse")
+
+    val data = raw
+    data.cache().first()
 
     time {
       val brParamGrid = new ParamGridBuilder()
-        .addGrid(br.sampleRatioFeatures, Array(0.7,1))
-        .addGrid(br.replacementFeatures, Array(x = false))
+        .addGrid(br.subspaceRatio, Array(0.7, 1))
+        .addGrid(br.numBaseLearners, Array(10))
         .addGrid(br.replacement, Array(x = true))
         .addGrid(br.sampleRatio, Array(0.7, 1))
-        .addGrid(bl.maxDepth, Array(1,10))
-        .addGrid(bl.maxBins, Array(30,40))
+        .addGrid(bl.maxDepth, Array(10))
+        .addGrid(bl.maxBins, Array(30, 40))
         .build()
 
       val brCV = new CrossValidator()
         .setEstimator(br)
-        .setEvaluator(new RegressionEvaluator().setLabelCol(br.getLabelCol).setPredictionCol(br.getPredictionCol).setMetricName("rmse"))
+        .setEvaluator(re)
         .setEstimatorParamMaps(brParamGrid)
-        .setNumFolds(5)
+        .setNumFolds(3)
         .setParallelism(4)
 
       val brCVModel = brCV.fit(data)
@@ -43,19 +48,25 @@ class BaggingRegressorSuite extends FunSuite with DatasetSuiteBase {
       println(brCVModel.avgMetrics.mkString(","))
       print(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getReplacement + ",")
       print(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getSampleRatio + ",")
-      print(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getReplacementFeatures + ",")
-      print(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getSampleRatioFeatures + ",")
-      print(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].models(0).asInstanceOf[DecisionTreeRegressionModel].getMaxDepth + ",")
-      println(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].models(0).asInstanceOf[DecisionTreeRegressionModel].getMaxBins)
+      print(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getSubspaceRatio + ",")
+      print(
+        brCVModel.bestModel
+          .asInstanceOf[BaggingRegressionModel]
+          .models(0)
+          .asInstanceOf[DecisionTreeRegressionModel]
+          .getMaxDepth + ",")
+      println(
+        brCVModel.bestModel
+          .asInstanceOf[BaggingRegressionModel]
+          .models(0)
+          .asInstanceOf[DecisionTreeRegressionModel]
+          .getMaxBins)
       println(brCVModel.avgMetrics.min)
 
       val bm = brCVModel.bestModel.asInstanceOf[BaggingRegressionModel]
-      bm.models.foreach(model => println(model.explainParams()))
-      println(bm.explainParams())
       bm.write.overwrite().save("/tmp/bonjour")
       val loaded = BaggingRegressionModel.load("/tmp/bonjour")
-      println(loaded.explainParams())
-      loaded.models.foreach(model => println(model.explainParams()))
+      assert(re.evaluate(loaded.transform(data)) == re.evaluate(bm.transform(data)))
 
     }
 
@@ -68,9 +79,9 @@ class BaggingRegressorSuite extends FunSuite with DatasetSuiteBase {
 
       val cv = new CrossValidator()
         .setEstimator(rf)
-        .setEvaluator(new RegressionEvaluator().setLabelCol(rf.getLabelCol).setPredictionCol(rf.getPredictionCol).setMetricName("rmse"))
+        .setEvaluator(re)
         .setEstimatorParamMaps(paramGrid)
-        .setNumFolds(5)
+        .setNumFolds(3)
         .setParallelism(4)
 
       val cvModel = cv.fit(data)

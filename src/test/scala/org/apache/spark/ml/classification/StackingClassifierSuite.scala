@@ -9,10 +9,14 @@ class StackingClassifierSuite extends FunSuite with DatasetSuiteBase {
 
   test("benchmark") {
 
-    val raw = spark.read.format("libsvm").load("src/test/resources/data/vehicle/train.scale")
+    val raw = spark.read.format("libsvm").load("src/test/resources/data/vehicle/vehicle.svm")
 
     val sr = new StackingClassifier().setStacker(new DecisionTreeClassifier()).setBaseLearners(Array(new DecisionTreeClassifier(),new RandomForestClassifier())).setParallelism(4)
-    val rf = new RandomForestClassifier().setNumTrees(10)
+    val rf = new RandomForestClassifier()
+
+    val mce = new MulticlassClassificationEvaluator()
+      .setLabelCol("label")
+      .setPredictionCol("prediction")
 
     val data = raw
     data.cache()
@@ -23,15 +27,22 @@ class StackingClassifierSuite extends FunSuite with DatasetSuiteBase {
 
       val srCV = new CrossValidator()
         .setEstimator(sr)
-        .setEvaluator(new MulticlassClassificationEvaluator().setLabelCol(sr.getLabelCol).setPredictionCol(sr.getPredictionCol))
+        .setEvaluator(mce)
         .setEstimatorParamMaps(srParamGrid)
         .setNumFolds(5)
         .setParallelism(4)
 
       val srCVModel = srCV.fit(data)
 
-      println(srCVModel.avgMetrics.mkString(","))
       println(srCVModel.avgMetrics.max)
+
+
+      val bm = srCVModel.bestModel.asInstanceOf[StackingClassificationModel]
+      bm.write.overwrite().save("/tmp/bonjour")
+      val loaded = StackingClassificationModel.load("/tmp/bonjour")
+      assert(mce.evaluate(loaded.transform(data)) == mce.evaluate(bm.transform(data)))
+
+
 
     }
 
@@ -41,8 +52,8 @@ class StackingClassifierSuite extends FunSuite with DatasetSuiteBase {
 
       val cv = new CrossValidator()
         .setEstimator(rf)
-        .setEvaluator(new MulticlassClassificationEvaluator().setLabelCol(rf.getLabelCol).setPredictionCol(rf.getPredictionCol))
-        .setEstimatorParamMaps(paramGrid)
+        .setEvaluator(mce).
+        setEstimatorParamMaps(paramGrid)
         .setNumFolds(5)
         .setParallelism(4)
 

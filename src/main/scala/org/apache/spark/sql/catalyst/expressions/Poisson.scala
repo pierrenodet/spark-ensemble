@@ -2,13 +2,13 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.commons.math3.distribution.PoissonDistribution
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{AnalysisException, Column}
 import org.apache.spark.util.Utils
 
-case class Poisson(left: Expression, right: Expression)
+private[spark] case class Poisson(left: Expression, right: Expression)
     extends BinaryExpression
     with ExpectsInputTypes
     with Stateful
@@ -68,7 +68,7 @@ case class Poisson(left: Expression, right: Expression)
   override def freshCopy(): Poisson = Poisson(left, right)
 }
 
-object Poisson {
+private[spark] object Poisson {
 
   def apply(lambda: Column, seed: Column): Poisson = Poisson(lambda.expr, seed.expr)
 
@@ -77,5 +77,74 @@ object Poisson {
 
   def apply(lambda: Double, seed: Column): Poisson =
     Poisson(Literal(lambda, DoubleType), seed.expr)
+
+}
+
+private[spark] case class PoissonN(left: Expression, right: Expression)
+    extends BinaryExpression
+    with ExpectsInputTypes {
+
+  override def nullable: Boolean = false
+
+  override def dataType: DataType = IntegerType
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(
+      TypeCollection(FloatType, DoubleType, IntegerType, LongType),
+      TypeCollection(IntegerType, LongType))
+
+  def this(param: Expression) = this(param, Literal(Utils.random.nextLong(), LongType))
+
+  def this() = this(Literal(1, DoubleType))
+
+  override def eval(input: InternalRow): Any = {
+    val lambda = left.eval(input) match {
+      case l: Float => l.toDouble
+      case l: Double => l
+      case l: Int => l.toDouble
+      case l: Long => l.toDouble
+    }
+    val seed = right.eval(input) match {
+      case s: Int => s.toLong
+      case s: Long => s
+    }
+    val poisson = new PoissonDistribution(lambda)
+    poisson.reseedRandomGenerator(seed)
+    poisson.sample()
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val leftGen = left.genCode(ctx)
+    val rightGen = right.genCode(ctx)
+
+    val lambda = ctx.freshName("lambda")
+    val seed = ctx.freshName("seed")
+
+    val className = classOf[PoissonDistribution].getName
+
+    val poissonTerm = ctx.addMutableState(className, "poisson")
+
+    ev.copy(
+      code"""${leftGen.code}
+            |double $lambda = ${leftGen.value};
+            |${rightGen.code}
+            |long $seed = ${rightGen.value};
+            |$poissonTerm = new $className($lambda);
+            |$poissonTerm.reseedRandomGenerator($seed);
+            |final double ${ev.value} = $poissonTerm.sample();""",
+      isNull = FalseLiteral)
+  }
+
+}
+
+private[spark] object PoissonN {
+
+  def apply(lambda: Column, seed: Column): PoissonN = PoissonN(lambda.expr, seed.expr)
+
+  def apply(lambda: Double, seed: Long): PoissonN =
+    PoissonN(Literal(lambda, DoubleType), Literal(seed, LongType))
+
+  def apply(lambda: Double, seed: Column): PoissonN =
+    PoissonN(Literal(lambda, DoubleType), seed.expr)
 
 }

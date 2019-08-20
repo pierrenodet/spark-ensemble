@@ -2,22 +2,17 @@ package org.apache.spark.ml.regression
 
 import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
-import org.apache.spark.ml.ensemble.{
-  EnsemblePredictionModelType,
-  EnsemblePredictorType,
-  HasBaseLearners,
-  HasStacker
-}
-import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.ensemble.{EnsemblePredictionModelType, EnsemblePredictorType, HasBaseLearners, HasStacker}
+import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.param.{ParamMap, ParamPair}
 import org.apache.spark.ml.stacking.StackingParams
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.{PredictionModel, Predictor}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ThreadUtils
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{parse, render}
@@ -82,64 +77,90 @@ class StackingRegressor(override val uid: String)
     copied.setBaseLearners(copied.getBaseLearners.map(_.copy(extra)))
     copied.setStacker(copied.getStacker.copy(extra))
   }
-  override protected def train(dataset: Dataset[_]): StackingRegressionModel = instrumented {
-    instr =>
-      val spark = dataset.sparkSession
-
+  override protected def train(dataset: Dataset[_]): StackingRegressionModel =
+    instrumented { instr =>
       instr.logPipelineStage(this)
       instr.logDataset(dataset)
-      instr.logParams(this, seed)
+      instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol, parallelism)
 
-      val df = dataset.toDF().cache()
+      val spark = dataset.sparkSession
 
-      val learners = getBaseLearners
-      val numLearners = learners.length
+      val weightColIsUsed = isDefined(weightCol) && $(weightCol).nonEmpty && {
+        getBaseLearners.forall {
+          case _: HasWeightCol => true
+          case c =>
+            instr.logWarning(s"weightCol is ignored, as it is not supported by $c now.")
+            false
+        }
+      }
 
-      val futureModels = (0 until numLearners).map(iter =>
+      val df = if (weightColIsUsed) {
+        dataset.select($(labelCol), $(weightCol), $(featuresCol))
+      } else {
+        dataset.select($(labelCol), $(featuresCol))
+      }
+
+      val optWeightColName = if (weightColIsUsed) {
+        Some($(weightCol))
+      } else {
+        None
+      }
+
+      val handlePersistence = dataset.storageLevel == StorageLevel.NONE && (df.storageLevel == StorageLevel.NONE)
+      if (handlePersistence) {
+        df.persist(StorageLevel.MEMORY_AND_DISK)
+      }
+
+      val numBaseLearners = getBaseLearners.length
+
+      val futureModels = (0 until numBaseLearners).map(iter =>
         Future[EnsemblePredictionModelType] {
 
-          instr.logDebug(s"Start training for $iter learner")
-
-          val paramMap = new ParamMap()
-          paramMap.put(learners(iter).labelCol -> getLabelCol)
-          paramMap.put(learners(iter).featuresCol -> getFeaturesCol)
-
-          val model = learners(iter).fit(df, paramMap)
-
-          instr.logDebug(s"Start training for $iter learner")
-
-          model
+          fitBaseLearner(
+            getBaseLearners(iter),
+            getLabelCol,
+            getFeaturesCol,
+            getPredictionCol,
+            optWeightColName)(df)
 
         }(getExecutionContext))
 
       val models = futureModels.map(f => ThreadUtils.awaitResult(f, Duration.Inf)).toArray
 
-      val points: RDD[LabeledPoint] =
-        df.select(col($(labelCol)), col($(featuresCol))).rdd.map {
-          case Row(label: Double, features: Vector) =>
-            LabeledPoint(label, features)
+      val points = if (weightColIsUsed) {
+        df.select($(labelCol), $(weightCol), $(featuresCol)).rdd.map {
+          case Row(label: Double, weight: Double, features: Vector) =>
+            Instance(label, weight, features)
         }
+      } else {
+        df.select($(labelCol), $(featuresCol)).rdd.map {
+          case Row(label: Double, features: Vector) =>
+            Instance(label, 1.0, features)
+        }
+      }
 
       val predictions =
         points.map(
           point =>
-            LabeledPoint(
+            Instance(
               point.label,
+              point.weight,
               Vectors.dense(models.map(model => model.predict(point.features)))))
 
       val predictionsDF = spark.createDataFrame(predictions)
 
-      val paramMap = new ParamMap()
-      paramMap.put(getStacker.labelCol -> "label")
-      paramMap.put(getStacker.featuresCol -> "features")
-
-      val stack = getStacker.fit(predictionsDF, paramMap)
+      val stack = fitBaseLearner(
+        getStacker,
+        "label",
+        "features",
+        getPredictionCol,
+        optWeightColName.map(_ => "weight"))(predictionsDF)
 
       df.unpersist()
 
       new StackingRegressionModel(models, stack)
 
-  }
+    }
 
   override def write: MLWriter = new StackingRegressor.StackingRegressorWriter(this)
 
@@ -230,7 +251,7 @@ object StackingRegressionModel extends MLReadable[StackingRegressionModel] {
     private val className = classOf[StackingRegressionModel].getName
 
     override def load(path: String): StackingRegressionModel = {
-      implicit val format = DefaultFormats
+      implicit val format: DefaultFormats = DefaultFormats
       val (metadata, learners, stacker) = StackingRegressorParams.loadImpl(path, sc, className)
       val models = learners.indices.toArray.map { idx =>
         val modelPath = new Path(path, s"model-$idx").toString
@@ -241,6 +262,8 @@ object StackingRegressionModel extends MLReadable[StackingRegressionModel] {
         DefaultParamsReader.loadParamsInstance[EnsemblePredictionModelType](stackPath, sc)
       val srModel = new StackingRegressionModel(metadata.uid, models, stack)
       metadata.getAndSetParams(srModel)
+      srModel.set("baseLearners", learners)
+      srModel.set("stacker", stacker)
       srModel
     }
   }
