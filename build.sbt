@@ -22,8 +22,9 @@ inThisBuild(
         url("https://github.com/pierrenodet"))),
     crossScalaVersions := List(Scala212Version, Scala211Version)))
 
-lazy val sparkensemble = project.
-  settings(
+lazy val core = project
+  .in(new File("core"))
+  .settings(
     javaOptions ++= Seq(
       "-Xms512M",
       "-Xmx2048M",
@@ -39,12 +40,10 @@ lazy val sparkensemble = project.
       "com.holdenkarau" %% "spark-testing-base" % (SparkVersion + "_" + SparkTestingBaseVersion),
       "org.apache.spark" %% "spark-hive" % SparkVersion,
       "org.scalatest" %% "scalatest" % ScalaTestVersion,
-      "org.scalacheck" %% "scalacheck" % ScalaCheckVersion
-    ).map(_ % Test)
-  )
+      "org.scalacheck" %% "scalacheck" % ScalaCheckVersion).map(_ % Test))
 
 lazy val docs = project
-  .in(file("sparkensemble-docs"))
+  .in(file("docs"))
   .settings(mdocVariables := Map("VERSION" -> version.value))
-  .dependsOn(sparkensemble)
+  .dependsOn(core)
   .enablePlugins(MdocPlugin)
