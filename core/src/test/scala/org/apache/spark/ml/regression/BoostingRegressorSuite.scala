@@ -30,7 +30,7 @@ class BoostingRegressorSuite extends FunSuite with DatasetSuiteBase {
         .addGrid(br.loss, Array("squared", "exponential"))
         .addGrid(br.validationIndicatorCol, Array("val"))
         .addGrid(br.numBaseLearners, Array(20))
-        .addGrid(br.tol, Array(1E-3))
+        .addGrid(br.tol, Array(1E-9))
         .addGrid(br.numRound, Array(3))
         .addGrid(dr.maxDepth, Array(10))
         .build()

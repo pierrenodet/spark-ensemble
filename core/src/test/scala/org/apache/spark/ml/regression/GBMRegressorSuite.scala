@@ -31,13 +31,13 @@ class GBMRegressorSuite extends FunSuite with DatasetSuiteBase {
     time {
       val gbmrParamGrid = new ParamGridBuilder()
         .addGrid(gmbr.learningRate, Array(0.5))
-        .addGrid(gmbr.numBaseLearners, Array(20))
+        .addGrid(gmbr.numBaseLearners, Array(30))
         .addGrid(gmbr.validationIndicatorCol, Array("val"))
-        .addGrid(gmbr.tol, Array(1E-3))
-        .addGrid(gmbr.numRound, Array(2))
+        .addGrid(gmbr.tol, Array(1E-9))
+        .addGrid(gmbr.numRound, Array(3))
         .addGrid(gmbr.sampleRatio, Array(0.8))
         .addGrid(gmbr.replacement, Array(true))
-        .addGrid(gmbr.sampleRatio, Array(0.8))
+        .addGrid(gmbr.sampleRatio, Array(0.8, 1.0))
         .addGrid(gmbr.optimizedWeights, Array(true))
         .addGrid(gmbr.loss, Array("squared", "huber"))
         .build()
@@ -74,7 +74,7 @@ class GBMRegressorSuite extends FunSuite with DatasetSuiteBase {
       val paramGrid = new ParamGridBuilder()
         .addGrid(gbt.stepSize, Array(0.1, 1.0))
         .addGrid(gbt.maxDepth, Array(10))
-        .addGrid(gbt.maxIter, Array(20))
+        .addGrid(gbt.maxIter, Array(30))
         .addGrid(gbt.subsamplingRate, Array(0.8, 1.0))
         .addGrid(gbt.validationIndicatorCol, Array("val"))
         .addGrid(gbt.lossType, Array("squared", "absolute"))
@@ -114,7 +114,6 @@ class GBMRegressorSuite extends FunSuite with DatasetSuiteBase {
 
       val cvModel = cv.fit(data)
 
-      println(cvModel.avgMetrics.mkString(","))
       println(cvModel.avgMetrics.min)
     }
   }

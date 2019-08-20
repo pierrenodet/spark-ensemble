@@ -28,10 +28,10 @@ class BoostingClassifierSuite extends FunSuite with DatasetSuiteBase {
 
     time {
       val bcParamGrid = new ParamGridBuilder()
-        .addGrid(bc.numBaseLearners, Array(50))
+        .addGrid(bc.numBaseLearners, Array(20))
         .addGrid(bc.loss, Array("exponential"))
         .addGrid(bc.tol, Array(1E-9))
-        .addGrid(bc.numRound, Array(3, 5, 8))
+        .addGrid(bc.numRound, Array(3, 8))
         .addGrid(bc.validationIndicatorCol, Array("val"))
         .addGrid(dc.maxDepth, Array(10, 20, 30))
         .build()
