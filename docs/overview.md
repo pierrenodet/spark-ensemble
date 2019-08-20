@@ -33,3 +33,23 @@ Here is the current list :
  * **GBM**
  
 They all work with Multiclass Classification and Regression.
+
+## Ready to Install ?
+
+Download the dependency from Maven Central
+
+**SBT**
+
+```scala
+libraryDependencies += "com.github.pierrenodet" %% "spark-ensemble" % "@VERSION@"
+```
+
+**Maven**
+
+```maven-pom
+<dependency>
+    <groupId>com.github.pierrenodet</groupId>
+    <artifactId>spark-ensemble_2.12</artifactId>
+    <version>@VERSION@</version>
+</dependency>
+```

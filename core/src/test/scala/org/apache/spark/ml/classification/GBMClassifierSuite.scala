@@ -17,8 +17,8 @@ class GBMClassifierSuite extends FunSuite with DatasetSuiteBase {
       .withColumn("val", when(rand() > 0.8, true).otherwise(false))
 
     val dr = new DecisionTreeRegressor()
-    val gbmc = new GBMClassifier().setBaseLearner(dr).setNumBaseLearners(10)
-    val rf = new RandomForestClassifier().setNumTrees(10)
+    val gbmc = new GBMClassifier().setBaseLearner(dr).setNumBaseLearners(5)
+    val rf = new RandomForestClassifier().setNumTrees(5)
     val dc = new DecisionTreeClassifier()
 
     val mce = new MulticlassClassificationEvaluator()
@@ -29,9 +29,9 @@ class GBMClassifierSuite extends FunSuite with DatasetSuiteBase {
 
     time {
       val gbmcParamGrid = new ParamGridBuilder()
-        .addGrid(gbmc.learningRate, Array(0.1))
-        .addGrid(gbmc.tol, Array(1E-9))
-        .addGrid(gbmc.numRound, Array(3))
+        .addGrid(gbmc.learningRate, Array(0.8))
+        .addGrid(gbmc.tol, Array(1E-6))
+        .addGrid(gbmc.numRound, Array(2))
         .addGrid(gbmc.validationIndicatorCol, Array("val"))
         .addGrid(gbmc.sampleRatio, Array(0.8))
         .addGrid(gbmc.replacement, Array(true))
