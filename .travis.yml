@@ -44,4 +44,4 @@ before_cache:
 
 before_install:
   - git fetch --tags
-  - npm i -g npm@8.10
+  - npm i -g npm
