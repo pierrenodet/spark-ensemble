@@ -25,6 +25,7 @@ inThisBuild(
 lazy val core = project
   .in(new File("core"))
   .settings(
+    moduleName := "spark-ensemble",
     javaOptions ++= Seq(
       "-Xms512M",
       "-Xmx2048M",
@@ -44,6 +45,9 @@ lazy val core = project
 
 lazy val docs = project
   .in(file("docs"))
-  .settings(mdocVariables := Map("VERSION" -> version.value))
+  .settings(
+    moduleName := "spark-ensemble-docs",
+    mdocVariables := Map("VERSION" -> version.value)
+  )
   .dependsOn(core)
-  .enablePlugins(MdocPlugin)
+  .enablePlugins(MdocPlugin,DocusaurusPlugin)
