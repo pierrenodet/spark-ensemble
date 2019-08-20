@@ -1,4 +1,7 @@
-# Bagging
+---
+id: bagging
+title: Bagging
+---
 
 Bagging (Bootstrap aggregating) is a meta-algorithm introduced by Breiman [[1](#references)] that generates multiple versions of a predictor and uses these to get an aggregated predictor.
 

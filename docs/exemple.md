@@ -1,6 +1,9 @@
-# Quick Exemple
+---
+id: exemple
+title: Exemple
+---
 
-**Building Base Learner**
+## Building Base Learner
 
 ```scala
 import org.apache.spark.ml.classification.DecisionTreeClassifier
@@ -9,7 +12,7 @@ val baseClassifier = new DecisionTreeClassifier()
 .setMaxDepth(20)
 ```
 
-**Building Meta Estimator**
+## Building Meta Estimator
 
 ```scala
 import org.apache.spark.ml.classification.BaggingClassifier
@@ -20,7 +23,7 @@ val baggingClassifier = new BaggingClassifier()
 .setParallelism(4)
 ```
 
-**Building Param Grid**
+## Building Param Grid
 
 ```scala
 import org.apache.spark.ml.tuning.ParamGridBuilder
@@ -31,7 +34,7 @@ val paramGrid = new ParamGridBuilder()
         .build()
 ```
 
-**Grid Search with Cross Validation**
+## Grid Search with Cross Validation
 
 ```scala
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
@@ -52,7 +55,7 @@ val bestModel = cvModel.bestModel.asInstanceOf[BaggingClassificationModel]
 bestModel
 ```
 
-**Save and Load**
+## Save and Load
 
 ```scala
 bestModel.write.overwrite().save("/tmp/kek")

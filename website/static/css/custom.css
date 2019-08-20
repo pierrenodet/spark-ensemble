@@ -14,3 +14,9 @@
 
 @media only screen and (min-width: 1500px) {
 }
+
+.mainContainer .index {
+  margin: 0 auto;
+  max-width: 650px;
+  padding: 0 10px;
+}

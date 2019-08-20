@@ -1,4 +1,7 @@
-# Stacking
+---
+id: stacking
+title: Stacking
+---
 
 Stacking (Stacked Generalization) is a meta-algorithm introduced by David H. Wolpert [[1](#references)] that involves training a learning algorithm to combine the predictions of several other learning algorithms.
 

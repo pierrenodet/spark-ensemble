@@ -144,7 +144,7 @@ private[ml] trait HasSubBag extends Params with HasSeed {
 
 }
 
-object HasSubBag {
+private[ml] object HasSubBag {
 
   type SubSpace = Array[Int]
 

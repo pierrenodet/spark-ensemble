@@ -1,4 +1,7 @@
-# Overview 
+---
+id: overview
+title: Overview
+---
 
 ## Why ?
 
@@ -24,9 +27,9 @@ Le classico of meta-algorithms have been implemented in this library as closely 
 
 Here is the current list :
 
- * Stacking
- * Bagging
- * Boosting
- * GBM
+ * **Stacking**
+ * **Bagging**
+ * **Boosting**
+ * **GBM**
  
 They all work with Multiclass Classification and Regression.

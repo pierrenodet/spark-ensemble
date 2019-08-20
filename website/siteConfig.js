@@ -15,12 +15,12 @@ const siteConfig = {
 
   headerLinks: [
     { href: apiUrl, label: "API Docs" },
-    { doc: "starting", label: "Documentation" },
+    { doc: "overview", label: "Documentation" },
     { href: repoUrl, label: "GitHub" }
   ],
 
-  headerIcon: "img/wood.png",
-  footerIcon: "img/wood.png",
+  headerIcon: "img/wood-white.svg",
+  titleIcon: "img/wood.svg",
   favicon: "img/wood.png",
 
   colors: {
