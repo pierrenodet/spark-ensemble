@@ -47,7 +47,6 @@ lazy val core = project
 lazy val docs = project
   .in(file("spark-ensemble-docs"))
   .settings(
-    scalaVersion := Scala212Version,
     moduleName := "spark-ensemble-docs",
     mdocVariables := Map("VERSION" -> version.value),
     unidocProjectFilter in (ScalaUnidoc, unidoc) := inProjects(core),
