@@ -20,13 +20,15 @@ inThisBuild(
         "Pierre Nodet",
         "nodet.pierre@gmail.com",
         url("https://github.com/pierrenodet"))),
-    crossScalaVersions := List(Scala212Version, Scala211Version)))
+    scalaVersion := Scala212Version,
+  crossScalaVersions := List(Scala212Version, Scala211Version))
+)
 
 lazy val core = project
-  .in(new File("core"))
+  .in(file("core"))
   .settings(
     moduleName := "spark-ensemble",
-    javaOptions ++= Seq(
+javaOptions ++= Seq(
       "-Xms512M",
       "-Xmx2048M",
       "-XX:MaxPermSize=2048M",
@@ -48,6 +50,7 @@ lazy val docs = project
   .in(file("spark-ensemble-docs"))
   .settings(
     moduleName := "spark-ensemble-docs",
+    skip in publish := true,
     mdocVariables := Map("VERSION" -> version.value),
     unidocProjectFilter in (ScalaUnidoc, unidoc) := inProjects(core),
     target in (ScalaUnidoc, unidoc) := (baseDirectory in LocalRootProject).value / "website" / "static" / "api",

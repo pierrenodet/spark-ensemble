@@ -43,7 +43,7 @@ before_cache:
   - rm -rf $HOME/.ivy2/local
 
 env:
-  - NODE_VERSION=11 CC=clang CXX=clang++
+  - NODE_VERSION=12 CC=clang CXX=clang++
 
 before_install:
   - git fetch --tags
