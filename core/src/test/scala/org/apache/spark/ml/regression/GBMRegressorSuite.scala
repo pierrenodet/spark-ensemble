@@ -30,15 +30,15 @@ class GBMRegressorSuite extends FunSuite with DatasetSuiteBase {
 
     time {
       val gbmrParamGrid = new ParamGridBuilder()
-        .addGrid(gmbr.learningRate, Array(0.5))
+        .addGrid(gmbr.learningRate, Array(0.3))
         .addGrid(gmbr.numBaseLearners, Array(30))
         .addGrid(gmbr.validationIndicatorCol, Array("val"))
         .addGrid(gmbr.tol, Array(1E-9))
         .addGrid(gmbr.numRound, Array(3))
         .addGrid(gmbr.sampleRatio, Array(0.8))
         .addGrid(gmbr.replacement, Array(true))
-        .addGrid(gmbr.sampleRatio, Array(0.8, 1.0))
-        .addGrid(gmbr.optimizedWeights, Array(true))
+        .addGrid(gmbr.subspaceRatio, Array(0.8, 1.0))
+        .addGrid(gmbr.optimizedWeights, Array(false,true))
         .addGrid(gmbr.loss, Array("squared", "huber"))
         .build()
 

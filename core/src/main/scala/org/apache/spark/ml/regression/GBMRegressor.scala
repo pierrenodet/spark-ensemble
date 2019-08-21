@@ -410,12 +410,16 @@ class GBMRegressor(override val uid: String)
         None
       }
 
-      val initConst = findOptimizedConst(
-        getLabelCol,
-        GBMRegressorParams.lossFunction(getLoss, getAlpha),
-        GBMRegressorParams.gradFunction(getLoss, getAlpha),
-        getMaxIter,
-        getTol)(train)
+      val initConst = if (getOptimizedWeights) {
+        findOptimizedConst(
+          getLabelCol,
+          GBMRegressorParams.lossFunction(getLoss, getAlpha),
+          GBMRegressorParams.gradFunction(getLoss, getAlpha),
+          getMaxIter,
+          getTol)(train)
+      } else {
+        0.0
+      }
 
       val (weights, subspaces, boosters) =
         trainBoosters(

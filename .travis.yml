@@ -42,6 +42,10 @@ before_cache:
   - find $HOME/.ivy2/cache -name "ivydata-*.properties" -type f -delete
   - rm -rf $HOME/.ivy2/local
 
+env:
+  - NODE_VERSION=11 CC=clang CXX=clang++
+
 before_install:
   - git fetch --tags
-  - npm i -g npm
+  - nvm install $NODE_VERSION
+
