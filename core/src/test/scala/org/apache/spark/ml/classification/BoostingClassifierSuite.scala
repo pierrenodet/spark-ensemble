@@ -15,7 +15,7 @@ class BoostingClassifierSuite extends FunSuite with DatasetSuiteBase {
     val dc = new DecisionTreeClassifier()
     val bc =
       new BoostingClassifier().setBaseLearner(dc)
-    val rf = new RandomForestClassifier().setNumTrees(30)
+    val rf = new RandomForestClassifier()
 
     val mce = new MulticlassClassificationEvaluator()
       .setLabelCol("label")
@@ -23,17 +23,17 @@ class BoostingClassifierSuite extends FunSuite with DatasetSuiteBase {
 
     val data = raw
       .withColumn("label", col("label").minus(lit(1.0)))
-      .withColumn("val", when(rand() > 0.9, true).otherwise(false))
+      .withColumn("val", when(rand() > 0.8, true).otherwise(false))
     data.cache()
 
     time {
       val bcParamGrid = new ParamGridBuilder()
-        .addGrid(bc.numBaseLearners, Array(20))
+        .addGrid(bc.numBaseLearners, Array(30))
         .addGrid(bc.loss, Array("exponential"))
         .addGrid(bc.tol, Array(1E-9))
-        .addGrid(bc.numRound, Array(3, 8))
+        .addGrid(bc.numRound, Array(8))
         .addGrid(bc.validationIndicatorCol, Array("val"))
-        .addGrid(dc.maxDepth, Array(10, 20, 30))
+        .addGrid(dc.maxDepth, Array(8))
         .build()
 
       val brCV = new CrossValidator()
@@ -67,9 +67,10 @@ class BoostingClassifierSuite extends FunSuite with DatasetSuiteBase {
 
     time {
       val paramGrid = new ParamGridBuilder()
+        .addGrid(rf.numTrees, Array(10))
         .addGrid(rf.featureSubsetStrategy, Array("auto"))
         .addGrid(rf.subsamplingRate, Array(0.3, 0.7, 1))
-        .addGrid(rf.maxDepth, Array(10, 20, 30))
+        .addGrid(rf.maxDepth, Array(8))
         .build()
 
       val cv = new CrossValidator()

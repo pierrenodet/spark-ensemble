@@ -59,7 +59,6 @@ class StackingClassifierSuite extends FunSuite with DatasetSuiteBase {
 
       val cvModel = cv.fit(data)
 
-      println(cvModel.avgMetrics.mkString(","))
       println(cvModel.bestModel.asInstanceOf[RandomForestClassificationModel].getSubsamplingRate)
       println(cvModel.avgMetrics.max)
     }

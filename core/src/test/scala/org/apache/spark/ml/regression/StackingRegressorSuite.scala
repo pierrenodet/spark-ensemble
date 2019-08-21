@@ -61,7 +61,6 @@ class StackingRegressorSuite extends FunSuite with DatasetSuiteBase {
 
       val cvModel = cv.fit(data)
 
-      println(cvModel.avgMetrics.mkString(","))
       println(cvModel.bestModel.asInstanceOf[RandomForestRegressionModel].getSubsamplingRate)
       println(cvModel.avgMetrics.min)
     }
