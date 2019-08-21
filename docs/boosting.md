@@ -3,4 +3,4 @@ id: boosting
 title: Boosting
 ---
 
-Coming Soon.
+Documentation Coming Soon.

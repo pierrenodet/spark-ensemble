@@ -3,4 +3,4 @@ id: gbm
 title: GBM
 ---
 
-Coming Soon.
+Documentation Coming Soon.

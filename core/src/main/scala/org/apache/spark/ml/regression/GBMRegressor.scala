@@ -94,16 +94,16 @@ private[ml] object GBMRegressorParams {
     loss match {
       case "squared" =>
         (y, prediction) =>
-          pow(y - prediction, 2) / 2
+          pow(y - prediction, 2) / 2.0
       case "absolute" =>
         (y, prediction) =>
           abs(y - prediction)
       case "huber" =>
         (y, prediction) =>
-          pow(alpha, 2) * (sqrt(1 + pow((y - prediction) / alpha, 2)) - 1)
+          pow(alpha, 2) * (sqrt(1.0 + pow((y - prediction) / alpha, 2)) - 1.0)
       case "quantile" =>
         (y, prediction) =>
-          if (prediction > y) (alpha - 1) * (y - prediction) else alpha * (y - prediction)
+          if (prediction > y) (alpha - 1.0) * (y - prediction) else alpha * (y - prediction)
       case _ => throw new RuntimeException(s"Boosting was given bad loss type: $loss")
     }
 
@@ -120,7 +120,7 @@ private[ml] object GBMRegressorParams {
           -(y - prediction) / sqrt(1 + pow((y - prediction) / alpha, 2))
       case "quantile" =>
         (y, prediction) =>
-          if (prediction > y) -(alpha - 1) else -alpha
+          if (prediction > y) -(alpha - 1.0) else -alpha
       case _ => throw new RuntimeException(s"Boosting was given bad loss type: $loss")
     }
 
@@ -293,7 +293,7 @@ class GBMRegressor(override val uid: String)
         if (iter == 0) {
 
           instrumentation.logInfo(s"Learning of GBM finished.")
-          (weights, subspaces, boosters)
+          (weights.dropRight(numTry), subspaces.dropRight(numTry), boosters.dropRight(numTry))
 
         } else {
 
@@ -307,12 +307,10 @@ class GBMRegressor(override val uid: String)
 
           val subspace = mkSubspace(sampleFeatureRatio, numFeatures, seed)
 
+          val residualsColName = "gbm$residuals" + UUID.randomUUID().toString
           val residuals = current
             .transform(train)
-            .withColumn(
-              labelColName,
-              -gradUDF(col(labelColName), col(predictionColName)),
-              train.schema(train.schema.fieldIndex(labelColName)).metadata)
+            .withColumn(residualsColName, -gradUDF(col(labelColName), col(predictionColName)))
             .drop(col(predictionColName))
 
           val subbag = residuals.transform(
@@ -320,7 +318,7 @@ class GBMRegressor(override val uid: String)
 
           val booster = fitBaseLearner(
             baseLearner,
-            labelColName,
+            residualsColName,
             featuresColName,
             predictionColName,
             weightColName)(subbag)
@@ -328,11 +326,10 @@ class GBMRegressor(override val uid: String)
           val weight = if (getOptimizedWeights) {
 
             learningRate * findOptimizedWeight(
+              current,
               booster,
               labelColName,
-              predictionColName,
               loss,
-              grad,
               maxIter,
               tol)(subbag)
 
@@ -348,14 +345,11 @@ class GBMRegressor(override val uid: String)
           val updatedBoosters = boosters :+ booster
           val updatedSubspaces = subspaces :+ subspace
 
-          val verror = evaluateOnValidation(
-            updatedWeights,
-            updatedSubspaces,
-            updatedBoosters,
-            const,
-            labelColName,
-            featuresColName,
-            loss)(validation)
+          val updatedModel =
+            new GBMRegressionModel(updatedWeights, updatedSubspaces, updatedBoosters, const)
+
+          val verror =
+            evaluateOnValidation(updatedModel, labelColName, loss)(validation)
 
           val (updatedIter, updatedError, updatedNumTry) =
             terminate(
@@ -414,7 +408,6 @@ class GBMRegressor(override val uid: String)
         findOptimizedConst(
           getLabelCol,
           GBMRegressorParams.lossFunction(getLoss, getAlpha),
-          GBMRegressorParams.gradFunction(getLoss, getAlpha),
           getMaxIter,
           getTol)(train)
       } else {

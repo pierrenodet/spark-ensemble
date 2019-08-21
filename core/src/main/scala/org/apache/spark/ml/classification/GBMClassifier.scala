@@ -297,7 +297,8 @@ class GBMClassifier(override val uid: String)
 
         if (iter == 0) {
 
-          (weights, subspaces, boosters)
+          instrumentation.logInfo(s"Learning of GBM finished.")
+          (weights.dropRight(numTry), subspaces.dropRight(numTry), boosters.dropRight(numTry))
 
         } else {
 
@@ -320,14 +321,16 @@ class GBMClassifier(override val uid: String)
                 val vecToArrUDF =
                   udf[Array[Double], Vector]((features: Vector) => features.toArray)
 
+                val residualsColName = "gbm$residuals" + UUID.randomUUID().toString
+                val relabeledColName = "gbm$relabeled" + UUID.randomUUID().toString
                 val residuals = current
                   .transform(train)
+                  .withColumn(relabeledColName,when(col(labelColName) === k.toDouble, 1.0).otherwise(0.0))
                   .withColumn(
-                    labelColName,
+                    residualsColName,
                     -gradUDF(
-                      when(col(labelColName) === k.toDouble, 1.0).otherwise(0.0),
-                      element_at(vecToArrUDF(col(rawPredictionColName)), k + 1)),
-                    train.schema(train.schema.fieldIndex(labelColName)).metadata)
+                      col(relabeledColName),
+                      element_at(vecToArrUDF(col(rawPredictionColName)), k + 1)))
                   .drop(col(predictionColName))
                   .drop(col(rawPredictionColName))
 
@@ -336,7 +339,7 @@ class GBMClassifier(override val uid: String)
 
                 val booster = fitBaseLearner(
                   baseLearner,
-                  labelColName,
+                  residualsColName,
                   featuresColName,
                   predictionColName,
                   weightColName)(subbag)
@@ -344,9 +347,9 @@ class GBMClassifier(override val uid: String)
                 val weight = if (getOptimizedWeights) {
 
                   learningRate * findOptimizedWeight(
+                    current,
                     booster,
-                    labelColName,
-                    predictionColName,
+                    relabeledColName,
                     loss,
                     grad,
                     maxIter,
@@ -372,14 +375,13 @@ class GBMClassifier(override val uid: String)
           val updatedBoosters = boosters :+ booster
           val updatedSubspaces = subspaces :+ subspace
 
-          val verror = evaluateOnValidation(
+          val updatedModel = new GBMClassificationModel(
             numClasses,
             updatedWeights,
             updatedSubspaces,
-            updatedBoosters,
-            labelColName,
-            featuresColName,
-            loss)(validation)
+            updatedBoosters)
+
+          val verror = evaluateOnValidation(updatedModel, labelColName, loss)(validation)
 
           val (updatedIter, updatedError, updatedNumTry) =
             terminate(

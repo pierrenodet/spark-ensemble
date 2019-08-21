@@ -12,12 +12,12 @@ class GBMRegressorSuite extends FunSuite with DatasetSuiteBase {
 
     val raw = spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm")
 
-    val gmbr = new GBMRegressor()
-      .setBaseLearner(new DecisionTreeRegressor())
-    val gbt =
-      new GBTRegressor()
     val tree =
       new DecisionTreeRegressor()
+    val gmbr = new GBMRegressor()
+      .setBaseLearner(tree)
+    val gbt =
+      new GBTRegressor()
 
     val re = new RegressionEvaluator()
       .setLabelCol("label")
@@ -30,16 +30,17 @@ class GBMRegressorSuite extends FunSuite with DatasetSuiteBase {
 
     time {
       val gbmrParamGrid = new ParamGridBuilder()
-        .addGrid(gmbr.learningRate, Array(0.3))
+        .addGrid(gmbr.learningRate, Array(1.0))
         .addGrid(gmbr.numBaseLearners, Array(30))
         .addGrid(gmbr.validationIndicatorCol, Array("val"))
-        .addGrid(gmbr.tol, Array(1E-9))
-        .addGrid(gmbr.numRound, Array(3))
+        .addGrid(gmbr.tol, Array(1E-3))
+        .addGrid(gmbr.numRound, Array(8))
         .addGrid(gmbr.sampleRatio, Array(0.8))
         .addGrid(gmbr.replacement, Array(true))
-        .addGrid(gmbr.subspaceRatio, Array(0.8, 1.0))
-        .addGrid(gmbr.optimizedWeights, Array(false,true))
-        .addGrid(gmbr.loss, Array("squared", "huber"))
+        .addGrid(gmbr.subspaceRatio, Array(1.0))
+        .addGrid(gmbr.optimizedWeights, Array(true))
+        .addGrid(gmbr.loss, Array("squared"))
+        .addGrid(gmbr.alpha, Array(0.5))
         .build()
 
       val gmbrCV = new CrossValidator()
@@ -72,10 +73,10 @@ class GBMRegressorSuite extends FunSuite with DatasetSuiteBase {
 
     time {
       val paramGrid = new ParamGridBuilder()
-        .addGrid(gbt.stepSize, Array(0.1, 1.0))
+        .addGrid(gbt.stepSize, Array(1.0))
         .addGrid(gbt.maxDepth, Array(10))
         .addGrid(gbt.maxIter, Array(30))
-        .addGrid(gbt.subsamplingRate, Array(0.8, 1.0))
+        .addGrid(gbt.subsamplingRate, Array(0.8))
         .addGrid(gbt.validationIndicatorCol, Array("val"))
         .addGrid(gbt.lossType, Array("squared", "absolute"))
         .build()

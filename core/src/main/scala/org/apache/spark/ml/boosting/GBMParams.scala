@@ -16,11 +16,14 @@
 
 package org.apache.spark.ml.boosting
 
+import java.util.UUID
+
 import breeze.linalg.{DenseVector => BreezeDV}
 import breeze.optimize.{
   ApproximateGradientFunction,
   CachedDiffFunction,
   DiffFunction,
+  LBFGS => BreezeLBFGS,
   LBFGSB => BreezeLBFGSB
 }
 import org.apache.spark.ml.PredictorParams
@@ -42,7 +45,7 @@ private[ml] trait GBMParams
     with BoostingParams
     with HasSubBag {
 
-  setDefault(learningRate -> 1)
+  setDefault(learningRate -> 1.0)
   setDefault(numBaseLearners -> 10)
   setDefault(tol -> 1E-3)
   setDefault(maxIter -> 10)
@@ -64,17 +67,24 @@ private[ml] trait GBMParams
   setDefault(optimizedWeights -> false)
 
   def findOptimizedWeight(
+      current: EnsemblePredictionModelType,
       booster: EnsemblePredictionModelType,
       labelColName: String,
-      predictionColName: String,
       loss: (Double, Double) => Double,
       grad: (Double, Double) => Double,
       maxIter: Int,
       tol: Double)(df: DataFrame): Double = {
 
-    val transformed = booster
-      .transform(df)
-      .select(col(labelColName), col(predictionColName))
+    val boosterPredictionColName = "gbm$booster" + UUID.randomUUID().toString
+    val currentPredictionColName = "gbm$current" + UUID.randomUUID().toString
+    val mBooster = booster.setPredictionCol(boosterPredictionColName)
+    val mCurrent = current.setPredictionCol(currentPredictionColName)
+
+    val transformed = mCurrent
+      .transform(
+        mBooster
+          .transform(df))
+      .select(col(labelColName), col(currentPredictionColName), col(boosterPredictionColName))
       .cache()
 
     val cdf = new CachedDiffFunction[BreezeDV[Double]](new DiffFunction[BreezeDV[Double]] {
@@ -83,14 +93,20 @@ private[ml] trait GBMParams
         val df = transformed
         val l = loss
         val ludf =
-          udf[Double, Double, Double]((label: Double, prediction: Double) =>
-            l(label, x * prediction))
+          udf[Double, Double, Double, Double](
+            (label: Double, current: Double, prediction: Double) =>
+              l(label, current + x * prediction))
         val g = grad
-        val gudf = udf[Double, Double, Double]((label: Double, prediction: Double) =>
-          g(label, x * prediction) * prediction)
+        val gudf = udf[Double, Double, Double, Double](
+          (label: Double, current: Double, prediction: Double) =>
+            g(label, current + x * prediction) * prediction)
         val lcn = labelColName
+        val bpcn = boosterPredictionColName
+        val cpcn = currentPredictionColName
         val res = df
-          .agg(sum(ludf(col(lcn), lit(1))), sum(gudf(col(lcn), lit(1))))
+          .agg(
+            sum(ludf(col(lcn), col(cpcn), col(bpcn))),
+            sum(gudf(col(lcn), col(cpcn), col(bpcn))))
           .first()
         (res.getDouble(0), BreezeDV[Double](Array(res.getDouble(1))))
       }
@@ -98,33 +114,34 @@ private[ml] trait GBMParams
 
     val lbfgsb =
       new BreezeLBFGSB(
-        BreezeDV[Double](Array(0.0)),
-        BreezeDV[Double](Array(1.0)),
+        BreezeDV[Double](Array(Double.NegativeInfinity)),
+        BreezeDV[Double](Array(Double.PositiveInfinity)),
         maxIter = maxIter,
         tolerance = tol,
         m = 10)
-    val iterations = lbfgsb.iterations(cdf, BreezeDV[Double](Array(1.0))).toArray
+    val optimized = lbfgsb.minimize(cdf, BreezeDV[Double](Array(0.0)))
 
-    val tmp = iterations(iterations.map(_.value).zipWithIndex.min._2).x(0)
-
-    val optimized = if (tmp.isNaN) 0.0 else tmp
-
-    transformed.unpersist()
-
-    optimized
+    optimized(0)
   }
 
   def findOptimizedWeight(
+      current: EnsemblePredictionModelType,
       booster: EnsemblePredictionModelType,
       labelColName: String,
-      predictionColName: String,
       loss: (Double, Double) => Double,
       maxIter: Int,
       tol: Double)(df: DataFrame): Double = {
 
-    val transformed = booster
-      .transform(df)
-      .select(col(labelColName), col(predictionColName))
+    val boosterPredictionColName = "gbm$booster" + UUID.randomUUID().toString
+    val currentPredictionColName = "gbm$current" + UUID.randomUUID().toString
+    val mBooster = booster.setPredictionCol(boosterPredictionColName)
+    val mCurrent = current.setPredictionCol(currentPredictionColName)
+
+    val transformed = mCurrent
+      .transform(
+        mBooster
+          .transform(df))
+      .select(col(labelColName), col(currentPredictionColName), col(boosterPredictionColName))
       .cache()
 
     def f(denseVector: BreezeDV[Double]): Double = {
@@ -132,12 +149,13 @@ private[ml] trait GBMParams
       val df = transformed
       val l = loss
       val ludf =
-        udf[Double, Double, Double]((label: Double, prediction: Double) =>
-          l(label, x * prediction))
+        udf[Double, Double, Double, Double]((label: Double, current: Double, booster: Double) =>
+          l(label, current + x * booster))
       val lcn = labelColName
-      val pcn = predictionColName
+      val bpcn = boosterPredictionColName
+      val cpcn = currentPredictionColName
       val res = df
-        .agg(sum(ludf(col(lcn), col(pcn))))
+        .agg(sum(ludf(col(lcn), col(cpcn), col(bpcn))))
         .first()
       res.getDouble(0)
     }
@@ -148,20 +166,15 @@ private[ml] trait GBMParams
 
     val lbfgsb =
       new BreezeLBFGSB(
-        BreezeDV[Double](Array(0.0)),
+        BreezeDV[Double](Array(Double.NegativeInfinity)),
         BreezeDV[Double](Array(Double.PositiveInfinity)),
         maxIter = maxIter,
         tolerance = tol,
         m = 10)
-    val iterations = lbfgsb.iterations(cdf, BreezeDV[Double](Array(1.0))).toArray
+    val optimized = lbfgsb.minimize(cdf, BreezeDV[Double](Array(0.0)))
 
-    val tmp = iterations(iterations.map(_.value).zipWithIndex.min._2).x(0)
+    optimized(0)
 
-    val optimized = if (tmp.isNaN) 0.0 else tmp
-
-    transformed.unpersist()
-
-    optimized
   }
 
   def findOptimizedConst(
@@ -181,14 +194,12 @@ private[ml] trait GBMParams
         val df = transformed
         val l = loss
         val ludf =
-          udf[Double, Double, Double]((label: Double, prediction: Double) =>
-            l(label, x * prediction))
+          udf[Double, Double]((label: Double) => l(label, x))
         val g = grad
-        val gudf = udf[Double, Double, Double]((label: Double, prediction: Double) =>
-          g(label, x * prediction) * prediction)
+        val gudf = udf[Double, Double]((label: Double) => g(label, x))
         val lcn = labelColName
         val res = df
-          .agg(sum(ludf(col(lcn), lit(1))), sum(gudf(col(lcn), lit(1))))
+          .agg(sum(ludf(col(lcn))), sum(gudf(col(lcn))))
           .first()
         (res.getDouble(0), BreezeDV[Double](Array(res.getDouble(1))))
       }
@@ -196,20 +207,14 @@ private[ml] trait GBMParams
 
     val lbfgsb =
       new BreezeLBFGSB(
-        BreezeDV[Double](Array(0.0)),
+        BreezeDV[Double](Array(Double.NegativeInfinity)),
         BreezeDV[Double](Array(Double.PositiveInfinity)),
         maxIter = maxIter,
         tolerance = tol,
         m = 10)
-    val iterations = lbfgsb.iterations(cdf, BreezeDV[Double](Array(1.0))).toArray
+    val optimized = lbfgsb.minimize(cdf, BreezeDV[Double](Array(0.0)))
 
-    val tmp = iterations(iterations.map(_.value).zipWithIndex.min._2).x(0)
-
-    val optimized = if (tmp.isNaN) 0.0 else tmp
-
-    transformed.unpersist()
-
-    optimized
+    optimized(0)
   }
 
   def findOptimizedConst(
@@ -227,11 +232,10 @@ private[ml] trait GBMParams
       val df = transformed
       val l = loss
       val ludf =
-        udf[Double, Double, Double]((label: Double, prediction: Double) =>
-          l(label, x * prediction))
+        udf[Double, Double]((label: Double) => l(label, x))
       val lcn = labelColName
       val res = df
-        .agg(sum(ludf(col(lcn), lit(1))))
+        .agg(sum(ludf(col(lcn))))
         .first()
       res.getDouble(0)
     }
@@ -242,31 +246,21 @@ private[ml] trait GBMParams
 
     val lbfgsb =
       new BreezeLBFGSB(
-        BreezeDV[Double](Array(0.0)),
+        BreezeDV[Double](Array(Double.NegativeInfinity)),
         BreezeDV[Double](Array(Double.PositiveInfinity)),
         maxIter = maxIter,
         tolerance = tol,
         m = 10)
-    val iterations = lbfgsb.iterations(cdf, BreezeDV[Double](Array(1.0))).toArray
+    val optimized = lbfgsb.minimize(cdf, BreezeDV[Double](Array(0.0)))
 
-    val tmp = iterations(iterations.map(_.value).zipWithIndex.min._2).x(0)
+    optimized(0)
 
-    val optimized = if (tmp.isNaN) 0.0 else tmp
-
-    transformed.unpersist()
-
-    optimized
   }
 
   def evaluateOnValidation(
-      weights: Array[Double],
-      subspaces: Array[SubSpace],
-      boosters: Array[EnsemblePredictionModelType],
-      const: Double,
+      model: GBMRegressionModel,
       labelColName: String,
-      featuresColName: String,
       loss: (Double, Double) => Double)(df: DataFrame): Double = {
-    val model = new GBMRegressionModel(weights, subspaces, boosters, const)
     val lossUDF = udf[Double, Double, Double](loss)
     model
       .transform(df)
@@ -276,20 +270,15 @@ private[ml] trait GBMParams
   }
 
   def evaluateOnValidation(
-      numClasses: Int,
-      weights: Array[Array[Double]],
-      subspaces: Array[SubSpace],
-      boosters: Array[Array[EnsemblePredictionModelType]],
+      model: GBMClassificationModel,
       labelColName: String,
-      featuresColName: String,
       loss: (Double, Double) => Double)(df: DataFrame): Double = {
-    val model = new GBMClassificationModel(numClasses, weights, subspaces, boosters)
     val lossUDF = udf[Double, Double, Double](loss)
     val transformed = model
       .transform(df)
     val vecToArrUDF =
       udf[Array[Double], Vector]((features: Vector) => features.toArray)
-    Range(0, numClasses).toArray
+    Range(0, model.numClasses).toArray
       .map(
         k =>
           transformed
