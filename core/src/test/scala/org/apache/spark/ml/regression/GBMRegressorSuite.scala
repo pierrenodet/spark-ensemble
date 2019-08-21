@@ -38,7 +38,7 @@ class GBMRegressorSuite extends FunSuite with DatasetSuiteBase {
         .addGrid(gmbr.sampleRatio, Array(0.8))
         .addGrid(gmbr.replacement, Array(true))
         .addGrid(gmbr.subspaceRatio, Array(1.0))
-        .addGrid(gmbr.optimizedWeights, Array(true))
+        .addGrid(gmbr.optimizedWeights, Array(false,true))
         .addGrid(gmbr.loss, Array("squared"))
         .addGrid(gmbr.alpha, Array(0.5))
         .build()

@@ -306,9 +306,11 @@ class GBMClassifier(override val uid: String)
 
           val gradUDF = udf[Double, Double, Double](grad(_, _))
 
+          val currentPredictionColName = "gbm$current" + UUID.randomUUID().toString
+          val currentRawPredictionColName = "gbm$current-raw" + UUID.randomUUID().toString
           val current = new GBMClassificationModel(numClasses, weights, subspaces, boosters)
-            .setRawPredictionCol(rawPredictionColName)
-            .setPredictionCol(predictionColName)
+            .setRawPredictionCol(currentRawPredictionColName)
+            .setPredictionCol(currentPredictionColName)
             .setFeaturesCol(featuresColName)
 
           val subspace = mkSubspace(sampleFeatureRatio, numFeatures, seed)
@@ -323,16 +325,19 @@ class GBMClassifier(override val uid: String)
 
                 val residualsColName = "gbm$residuals" + UUID.randomUUID().toString
                 val relabeledColName = "gbm$relabeled" + UUID.randomUUID().toString
+                val currentPartialPredColName = "gbm$current-partial" + UUID.randomUUID().toString
+
                 val residuals = current
                   .transform(train)
-                  .withColumn(relabeledColName,when(col(labelColName) === k.toDouble, 1.0).otherwise(0.0))
+                  .withColumn(
+                    relabeledColName,
+                    when(col(labelColName) === k.toDouble, 1.0).otherwise(0.0))
+                  .withColumn(
+                    currentPartialPredColName,
+                    element_at(vecToArrUDF(col(currentRawPredictionColName)), k + 1))
                   .withColumn(
                     residualsColName,
-                    -gradUDF(
-                      col(relabeledColName),
-                      element_at(vecToArrUDF(col(rawPredictionColName)), k + 1)))
-                  .drop(col(predictionColName))
-                  .drop(col(rawPredictionColName))
+                    -gradUDF(col(relabeledColName), col(currentPartialPredColName)))
 
                 val subbag = residuals.transform(
                   extractSubBag(bagColName, numBaseLearners - iter, featuresColName, subspace))
@@ -346,14 +351,18 @@ class GBMClassifier(override val uid: String)
 
                 val weight = if (getOptimizedWeights) {
 
+                  val boosterPredictionColName = "gbm$booster" + UUID.randomUUID().toString
+                  val transformed =
+                    booster.setPredictionCol(boosterPredictionColName).transform(subbag)
+
                   learningRate * findOptimizedWeight(
-                    current,
-                    booster,
                     relabeledColName,
+                    currentPartialPredColName,
+                    boosterPredictionColName,
                     loss,
                     grad,
                     maxIter,
-                    tol)(subbag)
+                    tol)(transformed)
 
                 } else {
 

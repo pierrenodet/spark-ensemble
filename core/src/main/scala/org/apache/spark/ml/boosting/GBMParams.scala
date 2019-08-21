@@ -67,23 +67,15 @@ private[ml] trait GBMParams
   setDefault(optimizedWeights -> false)
 
   def findOptimizedWeight(
-      current: EnsemblePredictionModelType,
-      booster: EnsemblePredictionModelType,
       labelColName: String,
+      currentPredictionColName: String,
+      boosterPredictionColName: String,
       loss: (Double, Double) => Double,
       grad: (Double, Double) => Double,
       maxIter: Int,
       tol: Double)(df: DataFrame): Double = {
 
-    val boosterPredictionColName = "gbm$booster" + UUID.randomUUID().toString
-    val currentPredictionColName = "gbm$current" + UUID.randomUUID().toString
-    val mBooster = booster.setPredictionCol(boosterPredictionColName)
-    val mCurrent = current.setPredictionCol(currentPredictionColName)
-
-    val transformed = mCurrent
-      .transform(
-        mBooster
-          .transform(df))
+    val transformed = df
       .select(col(labelColName), col(currentPredictionColName), col(boosterPredictionColName))
       .cache()
 
@@ -125,22 +117,14 @@ private[ml] trait GBMParams
   }
 
   def findOptimizedWeight(
-      current: EnsemblePredictionModelType,
-      booster: EnsemblePredictionModelType,
       labelColName: String,
+      currentPredictionColName: String,
+      boosterPredictionColName: String,
       loss: (Double, Double) => Double,
       maxIter: Int,
       tol: Double)(df: DataFrame): Double = {
 
-    val boosterPredictionColName = "gbm$booster" + UUID.randomUUID().toString
-    val currentPredictionColName = "gbm$current" + UUID.randomUUID().toString
-    val mBooster = booster.setPredictionCol(boosterPredictionColName)
-    val mCurrent = current.setPredictionCol(currentPredictionColName)
-
-    val transformed = mCurrent
-      .transform(
-        mBooster
-          .transform(df))
+    val transformed = df
       .select(col(labelColName), col(currentPredictionColName), col(boosterPredictionColName))
       .cache()
 

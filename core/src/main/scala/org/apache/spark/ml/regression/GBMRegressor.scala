@@ -301,8 +301,9 @@ class GBMRegressor(override val uid: String)
 
           val gradUDF = udf[Double, Double, Double](grad(_, _))
 
+          val currentPredictionColName = "gbm$current" + UUID.randomUUID().toString
           val current = new GBMRegressionModel(weights, subspaces, boosters, const)
-            .setPredictionCol(predictionColName)
+            .setPredictionCol(currentPredictionColName)
             .setFeaturesCol(featuresColName)
 
           val subspace = mkSubspace(sampleFeatureRatio, numFeatures, seed)
@@ -310,8 +311,9 @@ class GBMRegressor(override val uid: String)
           val residualsColName = "gbm$residuals" + UUID.randomUUID().toString
           val residuals = current
             .transform(train)
-            .withColumn(residualsColName, -gradUDF(col(labelColName), col(predictionColName)))
-            .drop(col(predictionColName))
+            .withColumn(
+              residualsColName,
+              -gradUDF(col(labelColName), col(currentPredictionColName)))
 
           val subbag = residuals.transform(
             extractSubBag(bagColName, numBaseLearners - iter, featuresColName, subspace))
@@ -325,13 +327,18 @@ class GBMRegressor(override val uid: String)
 
           val weight = if (getOptimizedWeights) {
 
+            val boosterPredictionColName = "gbm$booster" + UUID.randomUUID().toString
+            val transformed =
+              booster.setPredictionCol(boosterPredictionColName).transform(subbag)
+
             learningRate * findOptimizedWeight(
-              current,
-              booster,
               labelColName,
+              currentPredictionColName,
+              boosterPredictionColName,
               loss,
+              grad,
               maxIter,
-              tol)(subbag)
+              tol)(transformed)
 
           } else {
 
@@ -408,6 +415,7 @@ class GBMRegressor(override val uid: String)
         findOptimizedConst(
           getLabelCol,
           GBMRegressorParams.lossFunction(getLoss, getAlpha),
+          GBMRegressorParams.gradFunction(getLoss, getAlpha),
           getMaxIter,
           getTol)(train)
       } else {
