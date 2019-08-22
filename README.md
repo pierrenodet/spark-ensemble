@@ -9,4 +9,4 @@
 
 Library of Meta-Estimators à la scikit-learn for Ensemble Learning for Apache Spark MLLib
 
-<p align="center"><a href="https://pierrenodet.github.io/spark-ensemble"><B>microsite</B></a></p>
+<p align="center"><a href="https://pierrenodet.github.io/spark-ensemble"><B>website</B></a></p>
