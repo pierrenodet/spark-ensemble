@@ -35,7 +35,7 @@ class GBMClassifierSuite extends FunSuite with DatasetSuiteBase {
         .addGrid(gbmc.validationIndicatorCol, Array("val"))
         .addGrid(gbmc.sampleRatio, Array(0.8))
         .addGrid(gbmc.replacement, Array(true))
-        .addGrid(gbmc.subspaceRatio, Array(1.0))
+        .addGrid(gbmc.subspaceRatio, Array(0.8))
         .addGrid(gbmc.optimizedWeights, Array(false,true))
         .addGrid(gbmc.loss, Array("divergence"))
         .addGrid(dr.maxDepth, Array(10))

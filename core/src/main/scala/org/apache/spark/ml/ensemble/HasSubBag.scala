@@ -19,6 +19,7 @@ import java.util.UUID
 
 import org.apache.spark.SparkException
 import org.apache.spark.ml.ensemble.HasSubBag.SubSpace
+import org.apache.spark.ml.feature.VectorSlicer
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.HasSeed
@@ -112,12 +113,15 @@ private[ml] trait HasSubBag extends Params with HasSeed {
       .withColumn(tmpColName, replicate_row(element_at(col(bagColName), index + 1)))
       .drop(col(tmpColName))
 
-    val slicerUDF = udf { slicer(subspace) }
+    val tmpSubSpaceColName = "bag$tmp" + UUID.randomUUID().toString
+    val vs = new VectorSlicer()
+      .setInputCol(featuresColName)
+      .setOutputCol(tmpSubSpaceColName)
+      .setIndices(subspace)
 
-    replicated.withColumn(
-      featuresColName,
-      slicerUDF(col(featuresColName)),
-      df.schema(df.schema.fieldIndex(featuresColName)).metadata)
+    vs.transform(replicated)
+      .withColumn(featuresColName, col(tmpSubSpaceColName))
+      .drop(tmpSubSpaceColName)
 
   }
 
