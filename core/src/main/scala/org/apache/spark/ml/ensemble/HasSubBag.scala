@@ -120,9 +120,7 @@ private[ml] trait HasSubBag extends Params with HasSeed {
       .setIndices(subspace)
 
     vs.transform(replicated)
-      .withColumn(
-        featuresColName,
-        col(tmpSubSpaceColName))
+      .withColumn(featuresColName, col(tmpSubSpaceColName))
       .drop(tmpSubSpaceColName)
 
   }
