@@ -138,7 +138,6 @@ class GBMClassifierSuite extends FunSuite with DatasetSuiteBase {
     val y = Seq.fill(100)(1.0) ++ Seq.fill(100)(0.0)
     import spark.implicits._
     val data = spark.sparkContext.parallelize(x.zip(y)).toDF("features", "label")
-    data.show()
     val learned = br.fit(data)
     learned.transform(data).show()
   }
