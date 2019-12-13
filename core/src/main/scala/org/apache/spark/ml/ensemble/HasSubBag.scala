@@ -100,7 +100,7 @@ private[ml] trait HasSubBag extends Params with HasSeed {
           Some(i)
         } else {
           None
-      })
+        })
     }
 
   }

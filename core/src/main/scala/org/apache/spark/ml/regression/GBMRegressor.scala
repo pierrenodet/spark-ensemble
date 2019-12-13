@@ -93,14 +93,11 @@ private[ml] object GBMRegressorParams {
   def lossFunction(loss: String, alpha: Double): (Double, Double) => Double =
     loss match {
       case "squared" =>
-        (y, prediction) =>
-          pow(y - prediction, 2) / 2.0
+        (y, prediction) => pow(y - prediction, 2) / 2.0
       case "absolute" =>
-        (y, prediction) =>
-          abs(y - prediction)
+        (y, prediction) => abs(y - prediction)
       case "huber" =>
-        (y, prediction) =>
-          pow(alpha, 2) * (sqrt(1.0 + pow((y - prediction) / alpha, 2)) - 1.0)
+        (y, prediction) => pow(alpha, 2) * (sqrt(1.0 + pow((y - prediction) / alpha, 2)) - 1.0)
       case "quantile" =>
         (y, prediction) =>
           if (prediction > y) (alpha - 1.0) * (y - prediction) else alpha * (y - prediction)
@@ -110,17 +107,13 @@ private[ml] object GBMRegressorParams {
   def gradFunction(loss: String, alpha: Double): (Double, Double) => Double =
     loss match {
       case "squared" =>
-        (y, prediction) =>
-          -(y - prediction)
+        (y, prediction) => -(y - prediction)
       case "absolute" =>
-        (y, prediction) =>
-          -signum(y - prediction)
+        (y, prediction) => -signum(y - prediction)
       case "huber" =>
-        (y, prediction) =>
-          -(y - prediction) / sqrt(1 + pow((y - prediction) / alpha, 2))
+        (y, prediction) => -(y - prediction) / sqrt(1 + pow((y - prediction) / alpha, 2))
       case "quantile" =>
-        (y, prediction) =>
-          if (prediction > y) -(alpha - 1.0) else -alpha
+        (y, prediction) => if (prediction > y) -(alpha - 1.0) else -alpha
       case _ => throw new RuntimeException(s"Boosting was given bad loss type: $loss")
     }
 

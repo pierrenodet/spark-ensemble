@@ -66,7 +66,7 @@ private[ml] object StackingRegressorParams {
   }
 
   def loadImpl(path: String, sc: SparkContext, expectedClassName: String)
-    : (DefaultParamsReader.Metadata, Array[EnsemblePredictorType], EnsemblePredictorType) = {
+      : (DefaultParamsReader.Metadata, Array[EnsemblePredictorType], EnsemblePredictorType) = {
 
     val metadata = DefaultParamsReader.loadMetadata(path, sc, expectedClassName)
     val learners = HasBaseLearners.loadImpl(path, sc)

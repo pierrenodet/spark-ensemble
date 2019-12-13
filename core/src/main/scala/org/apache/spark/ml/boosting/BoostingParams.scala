@@ -29,6 +29,7 @@ import org.apache.spark.ml.regression.BoostingRegressionModel
 import org.apache.spark.ml.util.Instrumentation
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
+import scala.util.Try
 
 private[ml] trait BoostingParams
     extends PredictorParams
@@ -42,7 +43,7 @@ private[ml] trait BoostingParams
 
   setDefault(numRound -> 5)
   setDefault(numBaseLearners -> 10)
-  setDefault(tol -> 1E-3)
+  setDefault(tol -> 1e-3)
 
   def evaluateOnValidation(
       weights: Array[Double],
@@ -50,13 +51,17 @@ private[ml] trait BoostingParams
       labelColName: String,
       featuresColName: String,
       loss: Double => Double)(df: DataFrame): Double = {
-    val model = new BoostingRegressionModel(weights, boosters)
+    val model = new BoostingRegressionModel(weights, boosters).setFeaturesCol(featuresColName)
     val lossUDF = udf(loss)
-    model
-      .transform(df)
-      .agg(sum(lossUDF(abs(col(labelColName) - col(model.getPredictionCol)))))
-      .head()
-      .getDouble(0)
+    if (df.isEmpty) {
+      Double.MaxValue
+    } else {
+      model
+        .transform(df)
+        .agg(sum(lossUDF(abs(col(labelColName) - col(model.getPredictionCol)))))
+        .head()
+        .getDouble(0)
+    }
   }
 
   def evaluateOnValidation(
@@ -66,14 +71,18 @@ private[ml] trait BoostingParams
       labelColName: String,
       featuresColName: String,
       loss: Double => Double)(df: DataFrame): Double = {
-    val model = new BoostingClassificationModel(numClasses, weights, boosters)
+    val model = new BoostingRegressionModel(weights, boosters).setFeaturesCol(featuresColName)
     val lossUDF = udf(loss)
-    model
-      .transform(df)
-      .agg(
-        sum(lossUDF(when(col(labelColName) === col(model.getPredictionCol), 0.0).otherwise(1.0))))
-      .head()
-      .getDouble(0)
+    if (df.isEmpty) {
+      Double.MaxValue
+    } else {
+      model
+        .transform(df)
+        .agg(sum(
+          lossUDF(when(col(labelColName) === col(model.getPredictionCol), 0.0).otherwise(1.0))))
+        .head()
+        .getDouble(0)
+    }
   }
 
   def probabilize(
@@ -108,7 +117,11 @@ private[ml] trait BoostingParams
   }
 
   def weight(beta: Double): Double = {
-    math.log(1 / beta)
+    if (beta == 0.0) {
+      1.0
+    } else {
+      math.log(1 / beta)
+    }
   }
 
   def extractBoostedBag(poissonProbaColName: String, seed: Long)(df: DataFrame): DataFrame = {
@@ -174,11 +187,14 @@ private[ml] trait BoostingParams
       iter: Int,
       instrumentation: Instrumentation,
       numClasses: Double = 2.0): (Int, Double, Int) = {
-    if (avgl < ((numClasses - 1.0) / numClasses) && avgl > 0) {
-      terminateVal(withValidation, error, verror, tol, numRound, numTry, iter, instrumentation)
-    } else {
-      instrumentation.logInfo(s"Stopped because weight of new booster is higher than 0.5")
+    if (avgl > ((numClasses - 1.0) / numClasses)) {
+      instrumentation.logInfo(s"Stopped because weight of new booster is higher than $avgl")
       (0, 0.0, 1)
+    } else if (avgl == 0.0) {
+      instrumentation.logInfo(s"Stopped because the average loss was $avgl")
+      (0, 0.0, 0)
+    } else {
+      terminateVal(withValidation, error, verror, tol, numRound, numTry, iter, instrumentation)
     }
   }
 

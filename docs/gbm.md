@@ -9,6 +9,8 @@ The first of his ten commandments was named : Greedy Function Approximation: A G
 
 The second commandment was : Stochastic Gradient Boosting [[2](#references)] introducing randomness in each iteration by using SubBags.
 
+Beware of this evil trick from Satan : GBM only works with Regressors as base learners.
+
 PS : It works for multi-class Classification.
 PPS : Early stop is implemented with a N Round variant.
 
@@ -17,10 +19,11 @@ PPS : Early stop is implemented with a N Round variant.
 The parameters available for GBM are related to the base framework, the stochastic version and early stop.
 
 ```scala
-import org.apache.spark.ml.classification.{GBMClassifier, DecisionTreeClassifier}
+import org.apache.spark.ml.classification.GBMClassifier
+import org.apache.spark.ml.regression.DecisionTreeRegressor
 
 new GBMClassifier()
-        .setBaseLearner(new DecisionTreeClassifier()) //Base learner used by the meta-estimator.
+        .setBaseLearner(new DecisionTreeRegressor()) //Base learner used by the meta-estimator.
         .setNumBaseLearners(10) //Number of base learners.
         .setLearningRate(0.1) //Shrinkage parameter.
         .setSampleRatio(0.8) //Ratio sampling of exemples.
@@ -31,7 +34,7 @@ new GBMClassifier()
         .setAlpha(0.5) //Extra parameter for certain loss functions as quantile or huber.
         .setValidationIndicatorCol("val") //Column name that contains true or false for the early stop data set.
         .setTol(1E-3) //Tolerance for optimized step size and gain in loss on early stop set.
-        .setNumRound(8) //Number of rounds to wait for the loss on early stop set to decrease.               
+        .setNumRound(8) //Number of rounds to wait for the loss on early stop set to decrease.
 ```
 
 ## References

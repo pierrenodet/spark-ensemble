@@ -5,6 +5,7 @@ import org.apache.spark.ml.evaluation.RegressionEvaluator
 import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
 import org.apache.spark.sql.functions.{rand, when}
 import org.scalatest.FunSuite
+import org.apache.spark.ml.linalg.Vectors
 
 class BoostingRegressorSuite extends FunSuite with DatasetSuiteBase {
 
@@ -30,7 +31,7 @@ class BoostingRegressorSuite extends FunSuite with DatasetSuiteBase {
         .addGrid(br.loss, Array("squared", "exponential"))
         .addGrid(br.validationIndicatorCol, Array("val"))
         .addGrid(br.numBaseLearners, Array(20))
-        .addGrid(br.tol, Array(1E-9))
+        .addGrid(br.tol, Array(1e-9))
         .addGrid(br.numRound, Array(3))
         .addGrid(dr.maxDepth, Array(10))
         .build()
@@ -87,6 +88,20 @@ class BoostingRegressorSuite extends FunSuite with DatasetSuiteBase {
     val t1 = System.nanoTime()
     println("Elapsed time: " + (t1 - t0) + "ns")
     result
+  }
+
+  test("maxErrorIsNull") {
+    val dr = new DecisionTreeRegressor()
+    val br = new BoostingRegressor()
+      .setBaseLearner(dr)
+      .setNumBaseLearners(20)
+    val x = Seq.fill(100)(Vectors.dense(Array(1.0, 1.0)))
+    val y = Seq.fill(100)(1.0)
+    import spark.implicits._
+    val data = spark.sparkContext.parallelize(x.zip(y)).toDF("features", "label")
+    data.show()
+    val learned = br.fit(data)
+    learned.transform(data).show()
   }
 
 }

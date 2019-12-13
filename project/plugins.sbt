@@ -6,8 +6,7 @@ lazy val SbtScalaFmt = "1.5.1"
 lazy val SbtCiRelease = "1.2.6"
 
 addSbtPlugin("org.scoverage" % "sbt-scoverage" % SbtSCoverageVersion)
-addSbtPlugin("com.geirsson" % "sbt-scalafmt" % SbtScalaFmt)
-
+addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.3.0")
 addSbtPlugin("com.geirsson" % "sbt-ci-release" % SbtCiRelease)
 
 addSbtPlugin("org.scalameta" % "sbt-mdoc" % "1.3.1" )

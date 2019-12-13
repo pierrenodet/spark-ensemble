@@ -5,6 +5,7 @@ import org.apache.spark.ml.evaluation.RegressionEvaluator
 import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
 import org.apache.spark.sql.functions._
 import org.scalatest.FunSuite
+import org.apache.spark.ml.linalg.Vectors
 
 class GBMRegressorSuite extends FunSuite with DatasetSuiteBase {
 
@@ -33,12 +34,12 @@ class GBMRegressorSuite extends FunSuite with DatasetSuiteBase {
         .addGrid(gmbr.learningRate, Array(0.1))
         .addGrid(gmbr.numBaseLearners, Array(30))
         .addGrid(gmbr.validationIndicatorCol, Array("val"))
-        .addGrid(gmbr.tol, Array(1E-3))
+        .addGrid(gmbr.tol, Array(1e-3))
         .addGrid(gmbr.numRound, Array(8))
         .addGrid(gmbr.sampleRatio, Array(0.8))
         .addGrid(gmbr.replacement, Array(true))
         .addGrid(gmbr.subspaceRatio, Array(0.8))
-        .addGrid(gmbr.optimizedWeights, Array(false,true))
+        .addGrid(gmbr.optimizedWeights, Array(false, true))
         .addGrid(gmbr.loss, Array("squared"))
         .addGrid(gmbr.alpha, Array(0.5))
         .build()
@@ -125,6 +126,20 @@ class GBMRegressorSuite extends FunSuite with DatasetSuiteBase {
     val t1 = System.nanoTime()
     println("Elapsed time: " + (t1 - t0) + "ns")
     result
+  }
+
+  test("trivial taks") {
+    val dr = new DecisionTreeRegressor()
+    val br = new GBMRegressor()
+      .setBaseLearner(dr)
+      .setNumBaseLearners(20)
+    val x = Seq.fill(100)(Vectors.dense(Array(1.0, 1.0)))
+    val y = Seq.fill(100)(1.0)
+    import spark.implicits._
+    val data = spark.sparkContext.parallelize(x.zip(y)).toDF("features", "label")
+    data.show()
+    val learned = br.fit(data)
+    learned.transform(data).show()
   }
 
 }
