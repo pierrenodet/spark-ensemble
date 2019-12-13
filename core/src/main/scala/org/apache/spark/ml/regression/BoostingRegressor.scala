@@ -39,6 +39,7 @@ import org.json4s.JsonAST.{JInt, JString, JValue}
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{parse, render}
 import org.json4s.{DefaultFormats, JObject, JsonAST}
+import scala.util.Try
 
 private[ml] trait BoostingRegressorParams extends BoostingParams {
 
@@ -71,14 +72,11 @@ private[ml] object BoostingRegressorParams {
 
   def lossFunction(loss: String): Double => Double = loss match {
     case "exponential" =>
-      error =>
-        1 - breeze.numerics.exp(-error)
+      error => 1 - breeze.numerics.exp(-error)
     case "absolute" =>
-      error =>
-        error
+      error => error
     case "squared" =>
-      error =>
-        breeze.numerics.pow(error, 2)
+      error => breeze.numerics.pow(error, 2)
     case _ => throw new RuntimeException(s"Boosting was given bad loss type: $loss")
 
   }
@@ -248,7 +246,7 @@ class BoostingRegressor(override val uid: String)
           val lossUDF = udf(loss)
           val lossColName = "boost$loss" + UUID.randomUUID().toString
           val losses = errors
-            .withColumn(lossColName, lossUDF(col(errorColName) / maxError))
+            .withColumn(lossColName, coalesce(lossUDF(col(errorColName) / maxError), lit(0.0)))
 
           val avgl = avgLoss(lossColName, boostProbaColName)(losses)
 

@@ -11,7 +11,10 @@ class StackingClassifierSuite extends FunSuite with DatasetSuiteBase {
 
     val raw = spark.read.format("libsvm").load("data/vehicle/vehicle.svm")
 
-    val sr = new StackingClassifier().setStacker(new DecisionTreeClassifier()).setBaseLearners(Array(new DecisionTreeClassifier(),new RandomForestClassifier())).setParallelism(4)
+    val sr = new StackingClassifier()
+      .setStacker(new DecisionTreeClassifier())
+      .setBaseLearners(Array(new DecisionTreeClassifier(), new RandomForestClassifier()))
+      .setParallelism(4)
     val rf = new RandomForestClassifier()
 
     val mce = new MulticlassClassificationEvaluator()
@@ -36,13 +39,10 @@ class StackingClassifierSuite extends FunSuite with DatasetSuiteBase {
 
       println(srCVModel.avgMetrics.max)
 
-
       val bm = srCVModel.bestModel.asInstanceOf[StackingClassificationModel]
       bm.write.overwrite().save("/tmp/bonjour")
       val loaded = StackingClassificationModel.load("/tmp/bonjour")
       assert(mce.evaluate(loaded.transform(data)) == mce.evaluate(bm.transform(data)))
-
-
 
     }
 
@@ -52,8 +52,8 @@ class StackingClassifierSuite extends FunSuite with DatasetSuiteBase {
 
       val cv = new CrossValidator()
         .setEstimator(rf)
-        .setEvaluator(mce).
-        setEstimatorParamMaps(paramGrid)
+        .setEvaluator(mce)
+        .setEstimatorParamMaps(paramGrid)
         .setNumFolds(5)
         .setParallelism(4)
 

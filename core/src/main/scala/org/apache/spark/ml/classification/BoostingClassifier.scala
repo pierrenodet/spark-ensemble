@@ -71,8 +71,7 @@ private[ml] object BoostingClassifierParams {
 
   def lossFunction(loss: String, numClasses: Int): Double => Double = loss match {
     case "exponential" =>
-      error =>
-        1 - breeze.numerics.exp(-error)
+      error => 1 - breeze.numerics.exp(-error)
     case _ => throw new RuntimeException(s"Boosting was given bad loss type: $loss")
 
   }

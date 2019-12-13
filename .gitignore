@@ -4,7 +4,8 @@ src_managed/
 project/boot/
 spark-wa*
 
-
+.bloop
+.metals
 .idea
 *.iml
 

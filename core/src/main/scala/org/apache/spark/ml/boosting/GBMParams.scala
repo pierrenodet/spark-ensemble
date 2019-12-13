@@ -47,7 +47,7 @@ private[ml] trait GBMParams
 
   setDefault(learningRate -> 1.0)
   setDefault(numBaseLearners -> 10)
-  setDefault(tol -> 1E-3)
+  setDefault(tol -> 1e-3)
   setDefault(maxIter -> 10)
 
   /**
@@ -246,11 +246,15 @@ private[ml] trait GBMParams
       labelColName: String,
       loss: (Double, Double) => Double)(df: DataFrame): Double = {
     val lossUDF = udf[Double, Double, Double](loss)
-    model
-      .transform(df)
-      .agg(sum(lossUDF(col(labelColName), col(model.getPredictionCol))))
-      .head()
-      .getDouble(0)
+    if (df.isEmpty) {
+      Double.MaxValue
+    } else {
+      model
+        .transform(df)
+        .agg(sum(lossUDF(col(labelColName), col(model.getPredictionCol))))
+        .head()
+        .getDouble(0)
+    }
   }
 
   def evaluateOnValidation(
@@ -258,21 +262,27 @@ private[ml] trait GBMParams
       labelColName: String,
       loss: (Double, Double) => Double)(df: DataFrame): Double = {
     val lossUDF = udf[Double, Double, Double](loss)
-    val transformed = model
-      .transform(df)
-    val vecToArrUDF =
-      udf[Array[Double], Vector]((features: Vector) => features.toArray)
-    Range(0, model.numClasses).toArray
-      .map(
-        k =>
-          transformed
-            .withColumn(labelColName, when(col(labelColName) === k.toDouble, 1.0).otherwise(0.0))
-            .agg(sum(lossUDF(
-              col(labelColName),
-              element_at(vecToArrUDF(col(model.getRawPredictionCol)), k + 1))))
-            .head()
-            .getDouble(0))
-      .sum
+    if (df.isEmpty) {
+      Double.MaxValue
+    } else {
+      val transformed = model
+        .transform(df)
+      val vecToArrUDF =
+        udf[Array[Double], Vector]((features: Vector) => features.toArray)
+      Range(0, model.numClasses).toArray
+        .map(
+          k =>
+            transformed
+              .withColumn(
+                labelColName,
+                when(col(labelColName) === k.toDouble, 1.0).otherwise(0.0))
+              .agg(sum(lossUDF(
+                col(labelColName),
+                element_at(vecToArrUDF(col(model.getRawPredictionCol)), k + 1))))
+              .head()
+              .getDouble(0))
+        .sum
+    }
   }
 
   def terminate(

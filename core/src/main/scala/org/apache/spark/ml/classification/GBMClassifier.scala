@@ -77,15 +77,13 @@ private[ml] object GBMClassifierParams {
 
   def lossFunction(loss: String): (Double, Double) => Double = loss match {
     case "divergence" =>
-      (y, prediction) =>
-        -y * breeze.numerics.log(prediction)
+      (y, prediction) => -y * breeze.numerics.log(prediction)
     case _ => throw new RuntimeException(s"Boosting was given bad loss type: $loss")
   }
 
   def gradFunction(loss: String): (Double, Double) => Double = loss match {
     case "divergence" =>
-      (y, prediction) =>
-        -(y - prediction)
+      (y, prediction) => -(y - prediction)
     case _ => throw new RuntimeException(s"Boosting was given bad loss type: $loss")
   }
 
@@ -293,7 +291,7 @@ class GBMClassifier(override val uid: String)
           iter: Int,
           error: Double,
           numTry: Int)
-        : (Array[Array[Double]], Array[SubSpace], Array[Array[EnsemblePredictionModelType]]) = {
+          : (Array[Array[Double]], Array[SubSpace], Array[Array[EnsemblePredictionModelType]]) = {
 
         if (iter == 0) {
 
@@ -390,7 +388,8 @@ class GBMClassifier(override val uid: String)
             updatedSubspaces,
             updatedBoosters)
 
-          val verror = evaluateOnValidation(updatedModel, labelColName, loss)(validation)
+          val verror =
+            evaluateOnValidation(updatedModel, labelColName, loss)(validation)
 
           val (updatedIter, updatedError, updatedNumTry) =
             terminate(

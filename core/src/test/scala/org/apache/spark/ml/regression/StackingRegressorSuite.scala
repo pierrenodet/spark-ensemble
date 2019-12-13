@@ -45,7 +45,6 @@ class StackingRegressorSuite extends FunSuite with DatasetSuiteBase {
       val loaded = StackingRegressionModel.load("/tmp/bonjour")
       assert(re.evaluate(loaded.transform(data)) == re.evaluate(bm.transform(data)))
 
-
     }
 
     time {
