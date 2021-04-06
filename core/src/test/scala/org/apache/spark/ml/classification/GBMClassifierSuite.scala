@@ -2,11 +2,12 @@ package org.apache.spark.ml.classification
 
 import com.holdenkarau.spark.testing.DatasetSuiteBase
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.regression.DecisionTreeRegressor
-import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
+import org.apache.spark.ml.tuning.CrossValidator
+import org.apache.spark.ml.tuning.ParamGridBuilder
 import org.apache.spark.sql.functions._
 import org.scalatest.FunSuite
-import org.apache.spark.ml.linalg.Vectors
 
 class GBMClassifierSuite extends FunSuite with DatasetSuiteBase {
 
@@ -15,11 +16,11 @@ class GBMClassifierSuite extends FunSuite with DatasetSuiteBase {
     val raw = spark.read.format("libsvm").load("data/vehicle/vehicle.svm")
     val data = raw
       .withColumn("label", col("label").minus(lit(1.0)))
-      .withColumn("val", when(rand() > 0.8, true).otherwise(false))
+      .withColumn("val", when(rand() > 0.9, true).otherwise(false))
 
     val dr = new DecisionTreeRegressor()
-    val gbmc = new GBMClassifier().setBaseLearner(dr).setNumBaseLearners(5)
-    val rf = new RandomForestClassifier().setNumTrees(5)
+    val gbmc = new GBMClassifier().setBaseLearner(dr).setNumBaseLearners(100)
+    val rf = new RandomForestClassifier().setNumTrees(100)
     val dc = new DecisionTreeClassifier()
 
     val mce = new MulticlassClassificationEvaluator()
@@ -30,14 +31,14 @@ class GBMClassifierSuite extends FunSuite with DatasetSuiteBase {
 
     time {
       val gbmcParamGrid = new ParamGridBuilder()
-        .addGrid(gbmc.learningRate, Array(0.8))
-        .addGrid(gbmc.tol, Array(1e-6))
-        .addGrid(gbmc.numRound, Array(2))
-        .addGrid(gbmc.validationIndicatorCol, Array("val"))
+        .addGrid(gbmc.learningRate, Array(0.1))
+        // .addGrid(gbmc.numRound, Array(4))
+        // .addGrid(gbmc.validationIndicatorCol, Array("val"))
+        .addGrid(gbmc.instanceTrimmingRatio, Array(0.2))
         .addGrid(gbmc.sampleRatio, Array(0.8))
         .addGrid(gbmc.replacement, Array(true))
         .addGrid(gbmc.subspaceRatio, Array(0.8))
-        .addGrid(gbmc.optimizedWeights, Array(false, true))
+        .addGrid(gbmc.optimizedWeights, Array(true))
         .addGrid(gbmc.loss, Array("divergence"))
         .addGrid(dr.maxDepth, Array(10))
         .build()
@@ -59,14 +60,24 @@ class GBMClassifierSuite extends FunSuite with DatasetSuiteBase {
       println(gbmcCVModel.bestModel.asInstanceOf[GBMClassificationModel].getSampleRatio)
       println(gbmcCVModel.bestModel.asInstanceOf[GBMClassificationModel].getReplacement)
       println(gbmcCVModel.bestModel.asInstanceOf[GBMClassificationModel].getSubspaceRatio)
+      println(gbmcCVModel.bestModel.asInstanceOf[GBMClassificationModel].consts.mkString(","))
       println(
         "weights : " + gbmcCVModel.bestModel
           .asInstanceOf[GBMClassificationModel]
           .weights
+          .map(_.mkString(","))
+          .mkString(";"))
+      println(
+        gbmcCVModel.bestModel.asInstanceOf[GBMClassificationModel].weights.size,
+        gbmcCVModel.bestModel
+          .asInstanceOf[GBMClassificationModel]
+          .weights
+          .map(_.size)
           .mkString(","))
       println(gbmcCVModel.avgMetrics.max)
 
       val bm = gbmcCVModel.bestModel.asInstanceOf[GBMClassificationModel]
+
       bm.write.overwrite().save("/tmp/bonjour")
       val loaded = GBMClassificationModel.load("/tmp/bonjour")
       assert(mce.evaluate(loaded.transform(data)) == mce.evaluate(bm.transform(data)))
@@ -76,17 +87,13 @@ class GBMClassifierSuite extends FunSuite with DatasetSuiteBase {
     time {
       val paramGrid = new ParamGridBuilder()
         .addGrid(rf.featureSubsetStrategy, Array("auto"))
-        .addGrid(rf.subsamplingRate, Array(0.3, 0.7, 1))
+        .addGrid(rf.subsamplingRate, Array(0.7, 1))
         .addGrid(rf.maxDepth, Array(10))
         .build()
 
       val cv = new CrossValidator()
         .setEstimator(rf)
-        .setEvaluator(
-          new MulticlassClassificationEvaluator()
-            .setMetricName("accuracy")
-            .setLabelCol(rf.getLabelCol)
-            .setPredictionCol(rf.getPredictionCol))
+        .setEvaluator(mce)
         .setEstimatorParamMaps(paramGrid)
         .setNumFolds(3)
         .setParallelism(4)
@@ -102,7 +109,7 @@ class GBMClassifierSuite extends FunSuite with DatasetSuiteBase {
 
     time {
       val paramGrid = new ParamGridBuilder()
-        .addGrid(dc.maxDepth, Array(1, 10, 20))
+        .addGrid(dc.maxDepth, Array(10))
         .build()
 
       val cv = new CrossValidator()

@@ -1,10 +1,9 @@
-lazy val SparkVersion = "2.4.3"
+lazy val SparkVersion = "3.1.1"
 lazy val ScalaTestVersion = "3.0.5"
 lazy val ScalaCheckVersion = "1.14.0"
-lazy val SparkTestingBaseVersion = "0.12.0"
+lazy val SparkTestingBaseVersion = "3.0.1_1.0.0"
 
-lazy val Scala211Version = "2.11.12"
-lazy val Scala212Version = "2.12.8"
+lazy val Scala212Version = "2.12.10"
 
 inThisBuild(
   List(
@@ -20,15 +19,13 @@ inThisBuild(
         "Pierre Nodet",
         "nodet.pierre@gmail.com",
         url("https://github.com/pierrenodet"))),
-    scalaVersion := Scala212Version,
-  crossScalaVersions := List(Scala212Version, Scala211Version))
-)
+    scalaVersion := Scala212Version))
 
 lazy val core = project
   .in(file("core"))
   .settings(
     moduleName := "spark-ensemble",
-javaOptions ++= Seq(
+    javaOptions ++= Seq(
       "-Xms512M",
       "-Xmx2048M",
       "-XX:MaxPermSize=2048M",
@@ -40,11 +37,10 @@ javaOptions ++= Seq(
       "org.apache.spark" %% "spark-sql" % SparkVersion % Provided,
       "org.apache.spark" %% "spark-mllib" % SparkVersion % Provided),
     libraryDependencies ++= Seq(
-      "com.holdenkarau" %% "spark-testing-base" % (SparkVersion + "_" + SparkTestingBaseVersion),
+      "com.holdenkarau" %% "spark-testing-base" % SparkTestingBaseVersion,
       "org.apache.spark" %% "spark-hive" % SparkVersion,
       "org.scalatest" %% "scalatest" % ScalaTestVersion,
       "org.scalacheck" %% "scalacheck" % ScalaCheckVersion).map(_ % Test))
-
 
 lazy val docs = project
   .in(file("spark-ensemble-docs"))
@@ -55,7 +51,7 @@ lazy val docs = project
     unidocProjectFilter in (ScalaUnidoc, unidoc) := inProjects(core),
     target in (ScalaUnidoc, unidoc) := (baseDirectory in LocalRootProject).value / "website" / "static" / "api",
     cleanFiles += (target in (ScalaUnidoc, unidoc)).value,
-    docusaurusCreateSite := docusaurusCreateSite.dependsOn(unidoc in Compile).value,
+    docusaurusCreateSite := docusaurusCreateSite.dependsOn(unidoc in Compile).value
   )
   .dependsOn(core)
-  .enablePlugins(MdocPlugin, DocusaurusPlugin,ScalaUnidocPlugin)
+  .enablePlugins(MdocPlugin, DocusaurusPlugin, ScalaUnidocPlugin)

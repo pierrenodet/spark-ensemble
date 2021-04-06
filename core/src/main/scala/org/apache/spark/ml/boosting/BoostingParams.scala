@@ -188,7 +188,8 @@ private[ml] trait BoostingParams
       instrumentation: Instrumentation,
       numClasses: Double = 2.0): (Int, Double, Int) = {
     if (avgl > ((numClasses - 1.0) / numClasses)) {
-      instrumentation.logInfo(s"Stopped because weight of new booster is higher than $avgl")
+      instrumentation.logInfo(
+        s"Stopped because the average loss of new booster is higher than ${(numClasses - 1.0) / numClasses}")
       (0, 0.0, 1)
     } else if (avgl == 0.0) {
       instrumentation.logInfo(s"Stopped because the average loss was $avgl")
