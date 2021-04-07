@@ -57,7 +57,7 @@ private[ml] trait GBMParams
     with HasSubBag {
 
   setDefault(learningRate -> 0.1)
-  setDefault(numBaseLearners -> 100)
+  setDefault(numBaseLearners -> 10)
   setDefault(tol -> 1e-6)
   setDefault(maxIter -> 100)
 

@@ -43,7 +43,7 @@ private[ml] trait BoostingParams
     with HasTol
     with HasNumRound {
 
-  setDefault(numRound -> 5)
+  setDefault(numRound -> 2)
   setDefault(numBaseLearners -> 10)
   setDefault(tol -> 1e-6)
 
