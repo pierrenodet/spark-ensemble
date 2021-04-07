@@ -404,7 +404,7 @@ class GBMRegressor(override val uid: String)
         None
       }
 
-      val initConst = if (getOptimizedWeights) {
+      val const = if (getOptimizedWeights) {
         findOptimizedConst(
           getLabelCol,
           GBMRegressorParams.lossFunction(getLoss, getAlpha),
@@ -441,7 +441,7 @@ class GBMRegressor(override val uid: String)
           Array.empty,
           Array.empty,
           Array.empty,
-          initConst,
+          const,
           getNumBaseLearners,
           Double.MaxValue,
           0)
@@ -451,7 +451,7 @@ class GBMRegressor(override val uid: String)
         validation.unpersist()
       }
 
-      new GBMRegressionModel(weights, subspaces, boosters, initConst)
+      new GBMRegressionModel(weights, subspaces, boosters, const)
 
     }
 

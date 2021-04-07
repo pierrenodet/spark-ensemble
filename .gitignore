@@ -8,6 +8,9 @@ spark-wa*
 .metals
 .idea
 *.iml
+.bsp
+.vscode
+metals.sbt
 
 *.swp
 
@@ -26,3 +29,5 @@ website/i18n/*
 website/static/api
 
 spark-ensemble-docs/*
+
+yarn-error.log

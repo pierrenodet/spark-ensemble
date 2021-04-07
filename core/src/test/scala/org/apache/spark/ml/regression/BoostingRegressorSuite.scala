@@ -77,7 +77,7 @@ class BoostingRegressorSuite extends FunSuite with DatasetSuiteBase {
 
       println(cvModel.avgMetrics.mkString(","))
       println(cvModel.bestModel.asInstanceOf[GBTRegressionModel].getSubsamplingRate)
-      println(cvModel.bestModel.asInstanceOf[GBTRegressionModel].numTrees)
+      println(cvModel.bestModel.asInstanceOf[GBTRegressionModel].getNumTrees)
       println(cvModel.avgMetrics.min)
     }
   }

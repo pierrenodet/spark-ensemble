@@ -15,30 +15,36 @@
  */
 
 package org.apache.spark.ml.classification
-import java.util.{Locale, UUID}
+import java.util.Locale
+import java.util.UUID
 
 import breeze.linalg.DenseVector
 import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.Predictor
 import org.apache.spark.ml.boosting.BoostingParams
-import org.apache.spark.ml.ensemble.{
-  EnsemblePredictionModelType,
-  EnsemblePredictorType,
-  HasBaseLearner
-}
-import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.ensemble.EnsemblePredictionModelType
+import org.apache.spark.ml.ensemble.EnsemblePredictorType
+import org.apache.spark.ml.ensemble.HasBaseLearner
+import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.param.Param
+import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.ParamPair
 import org.apache.spark.ml.param.shared.HasWeightCol
-import org.apache.spark.ml.param.{Param, ParamMap, ParamPair}
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.ml.util._
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DoubleType
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.storage.StorageLevel
+import org.json4s.DefaultFormats
+import org.json4s.JObject
 import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods.{parse, render}
-import org.json4s.{DefaultFormats, JObject}
+import org.json4s.jackson.JsonMethods.parse
+import org.json4s.jackson.JsonMethods.render
 
 private[ml] trait BoostingClassifierParams extends BoostingParams with ClassifierParams {
 
@@ -143,33 +149,6 @@ class BoostingClassifier(override val uid: String)
     copied.setBaseLearner(copied.getBaseLearner.copy(extra))
   }
 
-  /**
-   * Validates that number of classes is greater than zero.
-   *
-   * @param numClasses Number of classes label can take.
-   */
-  protected def validateNumClasses(numClasses: Int): Unit = {
-    require(
-      numClasses > 0,
-      s"Classifier (in extractLabeledPoints) found numClasses =" +
-        s" $numClasses, but requires numClasses > 0.")
-  }
-
-  /**
-   * Validates the label on the classifier is a valid integer in the range [0, numClasses).
-   *
-   * @param label The label to validate.
-   * @param numClasses Number of classes label can take.  Labels must be integers in the range
-   *                  [0, numClasses).
-   */
-  protected def validateLabel(label: Double, numClasses: Int): Unit = {
-    require(
-      label.toLong == label && label >= 0 && label < numClasses,
-      s"Classifier was given" +
-        s" dataset with invalid label $label.  Labels must be integers in range" +
-        s" [0, $numClasses).")
-  }
-
   override protected def train(dataset: Dataset[_]): BoostingClassificationModel = instrumented {
     instr =>
       instr.logPipelineStage(this)
@@ -228,6 +207,12 @@ class BoostingClassifier(override val uid: String)
       instr.logNumClasses(numClasses)
 
       validateNumClasses(numClasses)
+
+      dataset
+        .select(col($(labelCol)))
+        .rdd
+        .map { case Row(label: Double) => label }
+        .foreach(validateLabel(_, numClasses))
 
       def trainBoosters(
           train: DataFrame,
@@ -425,7 +410,7 @@ class BoostingClassificationModel(
 
   val numBaseModels: Int = models.length
 
-  override protected def predictRaw(features: Vector): Vector = {
+  override def predictRaw(features: Vector): Vector = {
     val tmp = DenseVector.zeros[Double](numClasses)
     weights
       .zip(models)
