@@ -18,17 +18,19 @@ package org.apache.spark.ml.boosting
 import org.apache.commons.math3.distribution.PoissonDistribution
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.classification.BoostingClassificationModel
-import org.apache.spark.ml.ensemble.{
-  EnsemblePredictionModelType,
-  HasBaseLearner,
-  HasNumBaseLearners,
-  HasNumRound
-}
-import org.apache.spark.ml.param.shared.{HasSeed, HasTol, HasValidationIndicatorCol, HasWeightCol}
+import org.apache.spark.ml.ensemble.EnsemblePredictionModelType
+import org.apache.spark.ml.ensemble.HasBaseLearner
+import org.apache.spark.ml.ensemble.HasNumBaseLearners
+import org.apache.spark.ml.ensemble.HasNumRound
+import org.apache.spark.ml.param.shared.HasSeed
+import org.apache.spark.ml.param.shared.HasTol
+import org.apache.spark.ml.param.shared.HasValidationIndicatorCol
+import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.regression.BoostingRegressionModel
 import org.apache.spark.ml.util.Instrumentation
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
+
 import scala.util.Try
 
 private[ml] trait BoostingParams
@@ -43,7 +45,7 @@ private[ml] trait BoostingParams
 
   setDefault(numRound -> 5)
   setDefault(numBaseLearners -> 10)
-  setDefault(tol -> 1e-3)
+  setDefault(tol -> 1e-6)
 
   def evaluateOnValidation(
       weights: Array[Double],

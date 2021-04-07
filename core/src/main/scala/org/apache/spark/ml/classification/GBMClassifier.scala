@@ -16,14 +16,6 @@
 
 package org.apache.spark.ml.classification
 
-import java.util.Locale
-import java.util.UUID
-
-import scala.annotation.tailrec
-import scala.concurrent.ExecutionContext
-import scala.concurrent.Future
-import scala.concurrent.duration.Duration
-
 import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.Predictor
@@ -31,14 +23,18 @@ import org.apache.spark.ml.boosting.GBMParams
 import org.apache.spark.ml.ensemble.HasSubBag.SubSpace
 import org.apache.spark.ml.ensemble._
 import org.apache.spark.ml.feature.OneHotEncoder
+import org.apache.spark.ml.functions.vector_to_array
 import org.apache.spark.ml.linalg.BLAS
 import org.apache.spark.ml.linalg.DenseVector
+import org.apache.spark.ml.linalg.Matrices
 import org.apache.spark.ml.linalg.SparseVector
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.param.DoubleParam
 import org.apache.spark.ml.param.Param
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.ParamPair
+import org.apache.spark.ml.param.ParamValidators
 import org.apache.spark.ml.param.shared.HasParallelism
 import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.util.Instrumentation.instrumented
@@ -55,12 +51,16 @@ import org.json4s.JObject
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.parse
 import org.json4s.jackson.JsonMethods.render
-import org.apache.spark.ml.linalg.Matrices
-import org.apache.spark.ml.param.DoubleParam
-import org.apache.spark.ml.param.ParamValidators
+
+import java.util.Locale
+import java.util.UUID
+import scala.annotation.tailrec
+import scala.concurrent.ExecutionContext
+import scala.concurrent.Future
+import scala.concurrent.duration.Duration
 
 private[ml] trait GBMClassifierParams
-    extends ClassifierParams
+    extends ProbabilisticClassifierParams
     with GBMParams
     with HasParallelism {
 
@@ -88,12 +88,32 @@ private[ml] trait GBMClassifierParams
   val instanceTrimmingRatio: Param[Double] = new DoubleParam(
     this,
     "instanceTrimmingRatio",
-    "instance trimming of top 1-instanceTrimmingRatio highest residuals every step",
+    "instance trimming of top quantile highest residuals every step",
     ParamValidators.inRange(0, 1))
 
   def getInstanceTrimmingRatio: Double = $(instanceTrimmingRatio)
 
-  setDefault(instanceTrimmingRatio -> 0.1)
+  setDefault(instanceTrimmingRatio -> 1.0)
+
+  def trim(instanceTrimmingRatio: Double, negGradColName: String, tol: Double)(
+      df: DataFrame): DataFrame = {
+    val instanceWeightColName = "gbm$instance-weight" + UUID.randomUUID().toString
+    val instanced = df
+      .withColumn(
+        instanceWeightColName,
+        aggregate(
+          transform(vector_to_array(col(negGradColName)), r => abs(r) * (lit(1.0) - abs(r))),
+          lit(1.0),
+          (acc, w) => acc * w))
+
+    val bottom =
+      instanced.stat.approxQuantile(instanceWeightColName, Array(1 - instanceTrimmingRatio), tol)(
+        0)
+    val trimmed =
+      instanced.filter(col(instanceWeightColName) >= bottom).drop(instanceWeightColName)
+
+    return trimmed
+  }
 
 }
 
@@ -189,6 +209,9 @@ class GBMClassifier(override val uid: String)
   def setNumBaseLearners(value: Int): this.type = set(numBaseLearners, value)
 
   /** @group setParam */
+  def setParallelism(value: Int): this.type = set(parallelism, value)
+
+  /** @group setParam */
   def setLoss(value: String): this.type = set(loss, value)
 
   /** @group setParam */
@@ -233,6 +256,7 @@ class GBMClassifier(override val uid: String)
         loss,
         maxIter,
         learningRate,
+        instanceTrimmingRatio,
         tol,
         seed)
 
@@ -349,9 +373,6 @@ class GBMClassifier(override val uid: String)
 
           val subspace = mkSubspace(sampleFeatureRatio, numFeatures, seed)
 
-          val vecToArrUDF =
-            udf[Array[Double], Vector]((features: Vector) => features.toArray)
-
           val negGradColName = "gbm$neg-grad" + UUID.randomUUID().toString
           val negGradUDF =
             udf[Vector, Vector, Vector]((label: Vector, score: Vector) => {
@@ -366,6 +387,8 @@ class GBMClassifier(override val uid: String)
               negGradColName,
               negGradUDF(col(labelColName), col(currentRawPredictionColName)))
 
+          val trimmed = trim(instanceTrimmingRatio, negGradColName, tol)(negGrad)
+
           val boosterFutures = Array
             .range(0, numClasses)
             .map(k =>
@@ -374,20 +397,10 @@ class GBMClassifier(override val uid: String)
 
                 val atUDF = udf[Double, Vector, Int]((vector: Vector, k: Int) => vector(k))
 
-                val residuals = negGrad
+                val residuals = trimmed
                   .withColumn(residualsColName, atUDF(col(negGradColName), lit(k)))
 
-                val instanceWeightColName = "gbm$instance-weight" + UUID.randomUUID().toString
-                val instanced = residuals
-                  .withColumn(
-                    instanceWeightColName,
-                    abs(col(residualsColName)) * (lit(1.0) - abs(col(residualsColName))))
-                val bottom = instanced.stat
-                  .approxQuantile(instanceWeightColName, Array(1 - instanceTrimmingRatio), tol)(0)
-
-                val trimmed = instanced.filter(col(instanceWeightColName) >= bottom)
-
-                val subbag = trimmed.transform(
+                val subbag = residuals.transform(
                   extractSubBag(bagColName, numBaseLearners - iter, featuresColName, subspace))
 
                 val booster = fitBaseLearner(

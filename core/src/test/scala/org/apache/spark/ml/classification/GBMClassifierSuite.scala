@@ -16,11 +16,11 @@ class GBMClassifierSuite extends FunSuite with DatasetSuiteBase {
     val raw = spark.read.format("libsvm").load("data/vehicle/vehicle.svm")
     val data = raw
       .withColumn("label", col("label").minus(lit(1.0)))
-      .withColumn("val", when(rand() > 0.9, true).otherwise(false))
+    // .withColumn("val", when(rand() > 0.9, true).otherwise(false))
 
     val dr = new DecisionTreeRegressor()
-    val gbmc = new GBMClassifier().setBaseLearner(dr).setNumBaseLearners(100)
-    val rf = new RandomForestClassifier().setNumTrees(100)
+    val gbmc = new GBMClassifier().setBaseLearner(dr).setNumBaseLearners(10).setParallelism(4)
+    val rf = new RandomForestClassifier().setNumTrees(10)
     val dc = new DecisionTreeClassifier()
 
     val mce = new MulticlassClassificationEvaluator()
@@ -32,9 +32,7 @@ class GBMClassifierSuite extends FunSuite with DatasetSuiteBase {
     time {
       val gbmcParamGrid = new ParamGridBuilder()
         .addGrid(gbmc.learningRate, Array(0.1))
-        // .addGrid(gbmc.numRound, Array(4))
-        // .addGrid(gbmc.validationIndicatorCol, Array("val"))
-        .addGrid(gbmc.instanceTrimmingRatio, Array(0.2))
+        .addGrid(gbmc.instanceTrimmingRatio, Array(1.0))
         .addGrid(gbmc.sampleRatio, Array(0.8))
         .addGrid(gbmc.replacement, Array(true))
         .addGrid(gbmc.subspaceRatio, Array(0.8))
@@ -135,7 +133,7 @@ class GBMClassifierSuite extends FunSuite with DatasetSuiteBase {
     result
   }
 
-  test("trivial taks") {
+  test("trivial tasks") {
     val dr = new DecisionTreeRegressor()
     val br = new GBMClassifier()
       .setBaseLearner(dr)

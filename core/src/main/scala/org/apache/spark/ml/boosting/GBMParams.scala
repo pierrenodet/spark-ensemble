@@ -16,10 +16,6 @@
 
 package org.apache.spark.ml.boosting
 
-import java.util.UUID
-
-import scala.util.Random
-
 import breeze.linalg.{DenseVector => BreezeDV}
 import breeze.optimize.ApproximateGradientFunction
 import breeze.optimize.CachedDiffFunction
@@ -30,7 +26,10 @@ import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.classification.GBMClassificationModel
 import org.apache.spark.ml.ensemble.HasSubBag.SubSpace
 import org.apache.spark.ml.ensemble._
+import org.apache.spark.ml.functions.vector_to_array
+import org.apache.spark.ml.linalg.BLAS
 import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.BooleanParam
 import org.apache.spark.ml.param.Param
 import org.apache.spark.ml.param.shared._
@@ -39,8 +38,16 @@ import org.apache.spark.ml.util.Instrumentation
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
-import org.apache.spark.ml.linalg.BLAS
-import org.apache.spark.ml.linalg.Vectors
+
+import java.util.UUID
+import scala.util.Random
+import org.apache.spark.sql.expressions.Aggregator
+import org.apache.spark.sql.Encoder
+import org.apache.spark.sql.Encoders
+import org.apache.spark.ml.linalg.VectorUDT
+import org.apache.spark.sql.types.StructType
+import scala.reflect.ClassTag
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
 
 private[ml] trait GBMParams
     extends PredictorParams
@@ -184,12 +191,11 @@ private[ml] trait GBMParams
       maxIter = maxIter,
       tolerance = tol,
       m = 10)
-    val optimized = lbfgs.minimizeAndReturnState(cdf, BreezeDV.zeros(numClasses))
+    val optimized = lbfgs.minimize(cdf, BreezeDV.zeros(numClasses))
 
     transformed.unpersist()
 
-    println(optimized.value)
-    optimized.x.toArray
+    optimized.toArray
 
   }
 
