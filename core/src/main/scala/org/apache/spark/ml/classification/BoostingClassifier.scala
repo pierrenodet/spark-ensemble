@@ -213,7 +213,7 @@ class BoostingClassifier(override val uid: String)
         .rdd
         .map { case Row(label: Double) => label }
         .foreach(validateLabel(_, numClasses))
-        
+
       def trainBoosters(
           train: DataFrame,
           validation: DataFrame,

@@ -244,7 +244,7 @@ class GBMClassifier(override val uid: String)
             false
         }
       }
-      
+
       val df = if (weightColIsUsed) {
         dataset.select($(labelCol), $(featuresCol), $(weightCol))
       } else {
