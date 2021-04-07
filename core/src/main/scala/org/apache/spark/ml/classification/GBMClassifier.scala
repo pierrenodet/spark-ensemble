@@ -95,7 +95,7 @@ private[ml] trait GBMClassifierParams
 
   setDefault(instanceTrimmingRatio -> 1.0)
 
-  def trim(instanceTrimmingRatio: Double, negGradColName: String, tol: Double)(
+  protected def trim(instanceTrimmingRatio: Double, negGradColName: String, tol: Double)(
       df: DataFrame): DataFrame = {
     val instanceWeightColName = "gbm$instance-weight" + UUID.randomUUID().toString
     val instanced = df
@@ -295,7 +295,7 @@ class GBMClassifier(override val uid: String)
       val bagged = train.transform(
         withBag(getReplacement, getSampleRatio, getNumBaseLearners, getSeed, bagColName))
 
-      val numFeatures = getNumFeatures(train, getFeaturesCol)
+      val numFeatures = MetadataUtils.getNumFeatures(train, getFeaturesCol)
 
       val numClasses = getNumClasses(train, maxNumClasses = numFeatures)
       instr.logNumClasses(numClasses)

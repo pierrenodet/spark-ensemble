@@ -77,7 +77,7 @@ private[ml] trait GBMParams
 
   setDefault(optimizedWeights -> false)
 
-  def findOptimizedWeight(
+  protected def findOptimizedWeight(
       labelColName: String,
       currentPredictionColName: String,
       boosterPredictionColName: String,
@@ -126,7 +126,7 @@ private[ml] trait GBMParams
     optimized(0)
   }
 
-  def findOptimizedWeight(
+  protected def findOptimizedWeight(
       labelColName: String,
       currentPredictionColName: String,
       boosterPredictionColName: String,
@@ -199,57 +199,7 @@ private[ml] trait GBMParams
 
   }
 
-  // def findOptimizedConst(
-  //     labelColName: String,
-  //     loss: (Array[Double], Array[Double]) => Double,
-  //     grad: (Array[Double], Array[Double]) => Array[Double],
-  //     numClasses: Int,
-  //     maxIter: Int,
-  //     tol: Double)(df: DataFrame): Array[Double] = {
-
-  //   val transformed = df
-  //     .select(col(labelColName))
-  //     .cache()
-
-  //   val cdf = new CachedDiffFunction[BreezeDV[Double]](new DiffFunction[BreezeDV[Double]] {
-  //     override def calculate(denseVector: BreezeDV[Double]): (Double, BreezeDV[Double]) = {
-  //       val x = denseVector.toArray
-  //       val df = transformed
-  //       val l = loss
-  //       val ludf =
-  //         udf[Double, Array[Double]]((label: Array[Double]) => l(label, x))
-  //       val g = grad
-  //       val gudf =
-  //         udf[Array[Double], Array[Double]]((label: Array[Double]) => g(label, x))
-  //       val lcn = labelColName
-  //       var agg = Seq.empty[Column]
-  //       var k = 0
-  //       while (k < numClasses) {
-  //         agg = agg :+ sum(element_at(gudf(col(lcn)), k + 1))
-  //         k += 1
-  //       }
-  //       val res = df.agg(sum(ludf(col(lcn))), agg: _*).first()
-  //       (
-  //         res.getDouble(0),
-  //         BreezeDV[Double](Array.range(0, numClasses).map(k => res.getDouble(k + 1))))
-
-  //     }
-  //   })
-
-  //   val lbfgsb =
-  //     new BreezeLBFGSB(
-  //       BreezeDV.fill(numClasses)(Double.NegativeInfinity),
-  //       BreezeDV.fill(numClasses)(Double.PositiveInfinity),
-  //       maxIter = maxIter,
-  //       tolerance = tol,
-  //       m = 10)
-  //   val optimized =
-  //     lbfgsb.minimize(cdf, BreezeDV.zeros(numClasses))
-
-  //   optimized.toArray
-  // }
-
-  def findOptimizedConst(
+  protected def findOptimizedConst(
       labelColName: String,
       loss: (Double, Double) => Double,
       grad: (Double, Double) => Double,
@@ -289,7 +239,7 @@ private[ml] trait GBMParams
     optimized(0)
   }
 
-  def evaluateOnValidation(
+  protected def evaluateOnValidation(
       model: GBMRegressionModel,
       labelColName: String,
       loss: (Double, Double) => Double)(df: DataFrame): Double = {
@@ -305,7 +255,7 @@ private[ml] trait GBMParams
     }
   }
 
-  def evaluateOnValidation(
+  protected def evaluateOnValidation(
       model: GBMClassificationModel,
       labelColName: String,
       loss: (Vector, Vector) => Double)(df: DataFrame): Double = {
@@ -323,7 +273,7 @@ private[ml] trait GBMParams
     }
   }
 
-  def terminate(
+  protected def terminate(
       weights: Array[Double],
       learningRate: Double,
       withValidation: Boolean,
@@ -343,7 +293,7 @@ private[ml] trait GBMParams
     }
   }
 
-  def terminate(
+  protected def terminate(
       weight: Double,
       learningRate: Double,
       withValidation: Boolean,

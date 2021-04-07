@@ -1,12 +1,13 @@
 const repoUrl = "https://github.com/pierrenodet/spark-ensemble";
 
-const apiUrl = "/spark-ensemble/api/org/apache/spark/index.html";
+const baseUrl = "/spark-ensemble/"
+const apiUrl = "/spark-ensemble/api/org/apache/spark/ml/index.html";
 
 const siteConfig = {
   title: 'spark-ensemble',
   tagline: 'Ensemble Learning for Apache Spark',
   url: 'https://pierrenodet.github.io/spark-ensemble',
-  baseUrl: '/spark-ensemble/',
+  baseUrl: baseUrl,
 
   projectName: "spark-ensemble",
   organizationName: "pierrenodet",

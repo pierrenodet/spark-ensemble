@@ -250,7 +250,7 @@ class GBMRegressor(override val uid: String)
       val bagged = train.transform(
         withBag(getReplacement, getSampleRatio, getNumBaseLearners, getSeed, bagColName))
 
-      val numFeatures = getNumFeatures(train, getFeaturesCol)
+      val numFeatures = MetadataUtils.getNumFeatures(train, getFeaturesCol)
 
       @tailrec
       def trainBoosters(
