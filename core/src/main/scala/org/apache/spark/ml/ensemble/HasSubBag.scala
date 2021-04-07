@@ -23,11 +23,11 @@ import org.apache.spark.ml.feature.VectorSlicer
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.HasSeed
-import org.apache.spark.ml.util.BaggingMetadataUtils
 import org.apache.spark.sql.bfunctions._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.util.random.XORShiftRandom
+import org.apache.spark.ml.util.MetadataUtils
 
 private[ml] trait HasSubBag extends Params with HasSeed {
 
@@ -78,7 +78,7 @@ private[ml] trait HasSubBag extends Params with HasSeed {
 
   setDefault(subspaceRatio -> 1)
 
-  def withBag(
+  protected def withBag(
       withReplacement: Boolean,
       sampleRatio: Double,
       numberSamples: Int,
@@ -87,7 +87,7 @@ private[ml] trait HasSubBag extends Params with HasSeed {
     df.withColumn(bagColName, bag(withReplacement, sampleRatio, numberSamples, seed))
   }
 
-  def mkSubspace(sampleRatio: Double, numFeatures: Int, seed: Long): SubSpace = {
+  protected def mkSubspace(sampleRatio: Double, numFeatures: Int, seed: Long): SubSpace = {
 
     val range = Array.range(0, numFeatures)
 
@@ -105,8 +105,11 @@ private[ml] trait HasSubBag extends Params with HasSeed {
 
   }
 
-  def extractSubBag(bagColName: String, index: Int, featuresColName: String, subspace: SubSpace)(
-      df: DataFrame): DataFrame = {
+  protected def extractSubBag(
+      bagColName: String,
+      index: Int,
+      featuresColName: String,
+      subspace: SubSpace)(df: DataFrame): DataFrame = {
 
     val tmpColName = "bag$tmp" + UUID.randomUUID().toString
     val replicated = df
@@ -125,25 +128,9 @@ private[ml] trait HasSubBag extends Params with HasSeed {
 
   }
 
-  def slicer(subspace: SubSpace): Vector => Vector = {
+  protected def slicer(subspace: SubSpace): Vector => Vector = {
     case features: DenseVector => Vectors.dense(subspace.map(features.apply))
     case features: SparseVector => features.slice(subspace)
-  }
-
-  def getNumFeatures(dataset: DataFrame, featuresCol: String): Int = {
-    BaggingMetadataUtils.getNumFeatures(dataset.schema(featuresCol)) match {
-      case Some(n: Int) => n
-      case None =>
-        // Get number of classes from dataset itself.
-        val numFeaturesUDF = udf((features: Vector) => features.size)
-        val sizeFeaturesCol: Array[Row] = dataset.select(numFeaturesUDF(col(featuresCol))).take(1)
-        if (sizeFeaturesCol.isEmpty || sizeFeaturesCol(0).get(0) == null) {
-          throw new SparkException("ML algorithm was given empty dataset.")
-        }
-        val sizeArrayFeatures: Int = sizeFeaturesCol.head.getInt(0)
-        val numFeatures = sizeArrayFeatures.toInt
-        numFeatures
-    }
   }
 
 }

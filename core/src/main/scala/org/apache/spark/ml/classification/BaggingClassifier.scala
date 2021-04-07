@@ -164,7 +164,7 @@ class BaggingClassifier(override val uid: String)
       val bagged = df.transform(
         withBag(getReplacement, getSampleRatio, getNumBaseLearners, getSeed, bagColName))
 
-      val numFeatures = getNumFeatures(df, getFeaturesCol)
+      val numFeatures = MetadataUtils.getNumFeatures(df, getFeaturesCol)
 
       val futureModels = Array
         .range(0, getNumBaseLearners)

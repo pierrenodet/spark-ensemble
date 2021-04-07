@@ -43,11 +43,11 @@ private[ml] trait BoostingParams
     with HasTol
     with HasNumRound {
 
-  setDefault(numRound -> 5)
+  setDefault(numRound -> 2)
   setDefault(numBaseLearners -> 10)
   setDefault(tol -> 1e-6)
 
-  def evaluateOnValidation(
+  protected def evaluateOnValidation(
       weights: Array[Double],
       boosters: Array[EnsemblePredictionModelType],
       labelColName: String,
@@ -66,7 +66,7 @@ private[ml] trait BoostingParams
     }
   }
 
-  def evaluateOnValidation(
+  protected def evaluateOnValidation(
       numClasses: Int,
       weights: Array[Double],
       boosters: Array[EnsemblePredictionModelType],
@@ -87,7 +87,7 @@ private[ml] trait BoostingParams
     }
   }
 
-  def probabilize(
+  protected def probabilize(
       boostWeightColName: String,
       boostProbaColName: String,
       poissonProbaColName: String)(df: DataFrame): DataFrame = {
@@ -98,7 +98,7 @@ private[ml] trait BoostingParams
       .withColumn(poissonProbaColName, col(boostProbaColName) * numLines)
   }
 
-  def updateWeights(
+  protected def updateWeights(
       boostWeightColName: String,
       lossColName: String,
       beta: Double,
@@ -108,17 +108,17 @@ private[ml] trait BoostingParams
       col(boostWeightColName) * pow(lit(beta), lit(1) - col(lossColName)))
   }
 
-  def avgLoss(lossColName: String, boostProbaColName: String)(df: DataFrame): Double = {
+  protected def avgLoss(lossColName: String, boostProbaColName: String)(df: DataFrame): Double = {
     df.agg(sum(col(lossColName) * col(boostProbaColName)))
       .first()
       .getDouble(0)
   }
 
-  def beta(avgl: Double, numClasses: Int = 2): Double = {
+  protected def beta(avgl: Double, numClasses: Int = 2): Double = {
     avgl / ((1 - avgl) * (numClasses - 1))
   }
 
-  def weight(beta: Double): Double = {
+  protected def weight(beta: Double): Double = {
     if (beta == 0.0) {
       1.0
     } else {
@@ -126,7 +126,8 @@ private[ml] trait BoostingParams
     }
   }
 
-  def extractBoostedBag(poissonProbaColName: String, seed: Long)(df: DataFrame): DataFrame = {
+  protected def extractBoostedBag(poissonProbaColName: String, seed: Long)(
+      df: DataFrame): DataFrame = {
 
     val poissonProbaColIndex = df.schema.fieldIndex(poissonProbaColName)
 
@@ -149,7 +150,7 @@ private[ml] trait BoostingParams
 
   }
 
-  def terminateVal(
+  protected def terminateVal(
       withValidation: Boolean,
       error: Double,
       verror: Double,
@@ -178,7 +179,7 @@ private[ml] trait BoostingParams
 
   }
 
-  def terminate(
+  protected def terminate(
       avgl: Double,
       withValidation: Boolean,
       error: Double,

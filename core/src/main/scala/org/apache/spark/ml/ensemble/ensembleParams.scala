@@ -96,7 +96,7 @@ private[ml] trait HasBaseLearner extends Params {
   /** @group getParam */
   def getBaseLearner: EnsemblePredictorType = $(baseLearner)
 
-  def fitBaseLearner(
+  protected def fitBaseLearner(
       baseLearner: EnsemblePredictorType,
       labelColName: String,
       featuresColName: String,
