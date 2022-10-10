@@ -16,9 +16,9 @@
 
 package org.apache.spark.ml.ensemble
 import java.util.UUID
+import scala.util.Random
 
 import org.apache.spark.SparkException
-import org.apache.spark.ml.ensemble.HasSubBag.SubSpace
 import org.apache.spark.ml.feature.VectorSlicer
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param._
@@ -26,7 +26,6 @@ import org.apache.spark.ml.param.shared.HasSeed
 import org.apache.spark.sql.bfunctions._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.util.random.XORShiftRandom
 import org.apache.spark.ml.util.MetadataUtils
 
 private[ml] trait HasSubBag extends Params with HasSeed {
@@ -42,24 +41,24 @@ private[ml] trait HasSubBag extends Params with HasSeed {
   /** @group getParam */
   def getReplacement: Boolean = $(replacement)
 
-  setDefault(replacement -> false)
+  setDefault(replacement -> true)
 
   /**
    * param for ratio of rows sampled out of the dataset
    *
    * @group param
    */
-  val sampleRatio: Param[Double] =
+  val subsampleRatio: Param[Double] =
     new DoubleParam(
       this,
-      "sampleRatio",
+      "subsampleRatio",
       "ratio of rows sampled out of the dataset",
       ParamValidators.inRange(0, 1))
 
   /** @group getParam */
-  def getSampleRatio: Double = $(sampleRatio)
+  def getSubsampleRatio: Double = $(subsampleRatio)
 
-  setDefault(sampleRatio -> 1)
+  setDefault(subsampleRatio -> 1)
 
   /**
    * param for ratio of rows sampled out of the dataset
@@ -78,65 +77,58 @@ private[ml] trait HasSubBag extends Params with HasSeed {
 
   setDefault(subspaceRatio -> 1)
 
-  protected def withBag(
-      withReplacement: Boolean,
-      sampleRatio: Double,
-      numberSamples: Int,
-      seed: Long,
-      bagColName: String)(df: DataFrame): DataFrame = {
-    df.withColumn(bagColName, bag(withReplacement, sampleRatio, numberSamples, seed))
-  }
-
-  protected def mkSubspace(sampleRatio: Double, numFeatures: Int, seed: Long): SubSpace = {
+  protected def mkSubspace(subspaceRatio: Double, numFeatures: Int, seed: Long): Array[Int] = {
 
     val range = Array.range(0, numFeatures)
-
-    if (sampleRatio == 1) {
-      range
-    } else {
-      val rng = new XORShiftRandom(seed)
-      range.flatMap(i =>
-        if (rng.nextDouble() < sampleRatio) {
-          Some(i)
-        } else {
-          None
-        })
-    }
+    val rng = new Random(seed)
+    range.filter(_ => rng.nextDouble() < subspaceRatio)
 
   }
 
-  protected def extractSubBag(
-      bagColName: String,
-      index: Int,
-      featuresColName: String,
-      subspace: SubSpace)(df: DataFrame): DataFrame = {
+  protected def subspace(featuresColName: String, indices: Array[Int], numFeatures: Int)(
+      df: DataFrame): DataFrame = {
 
-    val tmpColName = "bag$tmp" + UUID.randomUUID().toString
-    val replicated = df
-      .withColumn(tmpColName, replicate_row(element_at(col(bagColName), index + 1)))
-      .drop(col(tmpColName))
+    // shortcut
+    if (indices.sameElements(Array.range(0, numFeatures))) return df
 
     val tmpSubSpaceColName = "bag$tmp" + UUID.randomUUID().toString
     val vs = new VectorSlicer()
       .setInputCol(featuresColName)
       .setOutputCol(tmpSubSpaceColName)
-      .setIndices(subspace)
+      .setIndices(indices)
 
-    vs.transform(replicated)
+    vs.transform(df)
       .withColumn(featuresColName, col(tmpSubSpaceColName))
       .drop(tmpSubSpaceColName)
 
   }
 
-  protected def slicer(subspace: SubSpace): Vector => Vector = {
-    case features: DenseVector => Vectors.dense(subspace.map(features.apply))
-    case features: SparseVector => features.slice(subspace)
+  protected def bootstrap(replacement: Boolean, subsampleRatio: Double, seed: Long)(
+      df: DataFrame): DataFrame = {
+    // shortcut
+    if (!replacement && subsampleRatio == 1.0) return df
+
+    df.sample(replacement, subsampleRatio, seed)
   }
 
-}
+  protected def subbag(
+      featuresColName: String,
+      replacement: Boolean,
+      subsampleRatio: Double,
+      subspaceRatio: Double,
+      numFeatures: Int,
+      seed: Long)(df: DataFrame) = {
 
-private[ml] object HasSubBag {
+    val indices = mkSubspace(subspaceRatio, numFeatures, seed)
+    (
+      indices,
+      df.transform(bootstrap(replacement, subsampleRatio, seed))
+        .transform(subspace(featuresColName, indices, numFeatures)))
+  }
 
-  type SubSpace = Array[Int]
+  protected def slicer(indices: Array[Int]): Vector => Vector = {
+    case features: DenseVector => Vectors.dense(indices.map(features.apply))
+    case features: SparseVector => features.slice(indices, true)
+  }
 
 }

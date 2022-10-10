@@ -23,7 +23,7 @@ import org.apache.spark.ml.classification.{BaggingClassifier, DecisionTreeClassi
 new BaggingClassifier()
         .setBaseLearner(new DecisionTreeClassifier()) //Base learner used by the meta-estimator.
         .setNumBaseLearners(10) //Number of base learners.
-        .setSampleRatio(0.8) //Ratio sampling of exemples.
+        .setSubsampleRatio(0.8) //Ratio sampling of exemples.
         .setReplacement(true) //Exemples drawn with replacement or not.
         .setSubspaceRatio(0.8) //Ratio sampling of features.
         .setParallelism(4) //Number of base learners trained at the same time.

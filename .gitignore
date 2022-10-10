@@ -1,33 +1,65 @@
+# Project specific
+data/
+checkpoint/
+spark-ensemble-docs/
+
+# JVM specific
+*.class
+*.log
+
+# sbt specific
+dist/*
 target/
 lib_managed/
 src_managed/
 project/boot/
-spark-wa*
+project/plugins/project/
+project/hydra.sbt
 
-.bloop
-.metals
-.idea
-*.iml
-.bsp
-.vscode
-metals.sbt
+# Scala-IDE specific
+.scala_dependencies
+.cache
+.classpath
+.project
+.worksheet/
+bin/
+.settings/
 
-*.swp
+# VSCode specific
+.vscode/
 
+# OS X
 .DS_Store
 
-/tmp
+# Ctags
+.tags
 
-/metastore_db/
-derby.log
+# ENSIME
+.ensime
+.ensime_cache/
+
+# IntelliJ
+.idea/
+
+# Mill
+out/
+
+# Bloop/Metals
+.bloop/
+.bsp/
+.metals/
+metals.sbt
 
 website/translated_docs
 website/build/
 website/yarn.lock
 website/node_modules
 website/i18n/*
+!website/i18n/en.json
 website/static/api
+.docusaurus
+.cache-loader
 
-spark-ensemble-docs/*
-
-yarn-error.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

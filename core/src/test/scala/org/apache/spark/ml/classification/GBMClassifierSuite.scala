@@ -1,150 +1,166 @@
-package org.apache.spark.ml.classification
+/*
+ * Copyright 2019 Pierre Nodet
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
-import com.holdenkarau.spark.testing.DatasetSuiteBase
-import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
-import org.apache.spark.ml.linalg.Vectors
-import org.apache.spark.ml.regression.DecisionTreeRegressor
-import org.apache.spark.ml.tuning.CrossValidator
-import org.apache.spark.ml.tuning.ParamGridBuilder
-import org.apache.spark.sql.functions._
-import org.scalatest.FunSuite
+// package org.apache.spark.ml.classification
 
-class GBMClassifierSuite extends FunSuite with DatasetSuiteBase {
+// import com.holdenkarau.spark.testing.DatasetSuiteBase
+// import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
+// import org.apache.spark.ml.linalg.Vectors
+// import org.apache.spark.ml.regression.DecisionTreeRegressor
+// import org.apache.spark.ml.tuning.CrossValidator
+// import org.apache.spark.ml.tuning.ParamGridBuilder
+// import org.apache.spark.sql.functions._
+// import org.scalatest.FunSuite
 
-  test("benchmark") {
+// class GBMClassifierSuite extends FunSuite with DatasetSuiteBase {
 
-    val raw = spark.read.format("libsvm").load("data/vehicle/vehicle.svm")
-    val data = raw
-      .withColumn("label", col("label").minus(lit(1.0)))
-    // .withColumn("val", when(rand() > 0.9, true).otherwise(false))
+//   test("benchmark") {
 
-    val dr = new DecisionTreeRegressor()
-    val gbmc = new GBMClassifier().setBaseLearner(dr).setNumBaseLearners(10).setParallelism(4)
-    val rf = new RandomForestClassifier().setNumTrees(10)
-    val dc = new DecisionTreeClassifier()
+//     val raw = spark.read.format("libsvm").load("data/vehicle/vehicle.svm")
+//     val data = raw
+//       .withColumn("label", col("label").minus(lit(1.0)))
+//     // .withColumn("val", when(rand() > 0.9, true).otherwise(false))
 
-    val mce = new MulticlassClassificationEvaluator()
-      .setLabelCol("label")
-      .setPredictionCol("prediction")
+//     val dr = new DecisionTreeRegressor()
+//     val gbmc = new GBMClassifier().setBaseLearner(dr).setNumBaseLearners(10).setParallelism(4)
+//     val rf = new RandomForestClassifier().setNumTrees(10)
+//     val dc = new DecisionTreeClassifier()
 
-    data.cache()
+//     val mce = new MulticlassClassificationEvaluator()
+//       .setLabelCol("label")
+//       .setPredictionCol("prediction")
 
-    time {
-      val gbmcParamGrid = new ParamGridBuilder()
-        .addGrid(gbmc.learningRate, Array(0.1))
-        .addGrid(gbmc.instanceTrimmingRatio, Array(1.0))
-        .addGrid(gbmc.sampleRatio, Array(0.8))
-        .addGrid(gbmc.replacement, Array(true))
-        .addGrid(gbmc.subspaceRatio, Array(0.8))
-        .addGrid(gbmc.optimizedWeights, Array(true))
-        .addGrid(gbmc.loss, Array("divergence"))
-        .addGrid(dr.maxDepth, Array(10))
-        .build()
+//     data.cache()
 
-      val gbmcCV = new CrossValidator()
-        .setEstimator(gbmc)
-        .setEvaluator(mce)
-        .setEstimatorParamMaps(gbmcParamGrid)
-        .setNumFolds(3)
-        .setParallelism(4)
+//     time {
+//       val gbmcParamGrid = new ParamGridBuilder()
+//         .addGrid(gbmc.learningRate, Array(0.1))
+//         .addGrid(gbmc.instanceTrimmingRatio, Array(1.0))
+//         .addGrid(gbmc.sampleRatio, Array(0.8))
+//         .addGrid(gbmc.replacement, Array(true))
+//         .addGrid(gbmc.subspaceRatio, Array(0.8))
+//         .addGrid(gbmc.optimizedWeights, Array(true))
+//         .addGrid(gbmc.loss, Array("divergence"))
+//         .addGrid(dr.maxDepth, Array(10))
+//         .build()
 
-      val gbmcCVModel = gbmcCV.fit(data)
+//       val gbmcCV = new CrossValidator()
+//         .setEstimator(gbmc)
+//         .setEvaluator(mce)
+//         .setEstimatorParamMaps(gbmcParamGrid)
+//         .setNumFolds(3)
+//         .setParallelism(4)
 
-      println(gbmcCVModel.avgMetrics.mkString(","))
-      println(gbmcCVModel.bestModel.asInstanceOf[GBMClassificationModel].getLearningRate)
-      println(gbmcCVModel.bestModel.asInstanceOf[GBMClassificationModel].getNumBaseLearners)
-      println(gbmcCVModel.bestModel.asInstanceOf[GBMClassificationModel].getLoss)
-      println(gbmcCVModel.bestModel.asInstanceOf[GBMClassificationModel].getOptimizedWeights)
-      println(gbmcCVModel.bestModel.asInstanceOf[GBMClassificationModel].getSampleRatio)
-      println(gbmcCVModel.bestModel.asInstanceOf[GBMClassificationModel].getReplacement)
-      println(gbmcCVModel.bestModel.asInstanceOf[GBMClassificationModel].getSubspaceRatio)
-      println(gbmcCVModel.bestModel.asInstanceOf[GBMClassificationModel].consts.mkString(","))
-      println(
-        "weights : " + gbmcCVModel.bestModel
-          .asInstanceOf[GBMClassificationModel]
-          .weights
-          .map(_.mkString(","))
-          .mkString(";"))
-      println(
-        gbmcCVModel.bestModel.asInstanceOf[GBMClassificationModel].weights.size,
-        gbmcCVModel.bestModel
-          .asInstanceOf[GBMClassificationModel]
-          .weights
-          .map(_.size)
-          .mkString(","))
-      println(gbmcCVModel.avgMetrics.max)
+//       val gbmcCVModel = gbmcCV.fit(data)
 
-      val bm = gbmcCVModel.bestModel.asInstanceOf[GBMClassificationModel]
+//       println(gbmcCVModel.avgMetrics.mkString(","))
+//       println(gbmcCVModel.bestModel.asInstanceOf[GBMClassificationModel].getLearningRate)
+//       println(gbmcCVModel.bestModel.asInstanceOf[GBMClassificationModel].getNumBaseLearners)
+//       println(gbmcCVModel.bestModel.asInstanceOf[GBMClassificationModel].getLoss)
+//       println(gbmcCVModel.bestModel.asInstanceOf[GBMClassificationModel].getOptimizedWeights)
+//       println(gbmcCVModel.bestModel.asInstanceOf[GBMClassificationModel].getSampleRatio)
+//       println(gbmcCVModel.bestModel.asInstanceOf[GBMClassificationModel].getReplacement)
+//       println(gbmcCVModel.bestModel.asInstanceOf[GBMClassificationModel].getSubspaceRatio)
+//       println(gbmcCVModel.bestModel.asInstanceOf[GBMClassificationModel].consts.mkString(","))
+//       println(
+//         "weights : " + gbmcCVModel.bestModel
+//           .asInstanceOf[GBMClassificationModel]
+//           .weights
+//           .map(_.mkString(","))
+//           .mkString(";"))
+//       println(
+//         gbmcCVModel.bestModel.asInstanceOf[GBMClassificationModel].weights.size,
+//         gbmcCVModel.bestModel
+//           .asInstanceOf[GBMClassificationModel]
+//           .weights
+//           .map(_.size)
+//           .mkString(","))
+//       println(gbmcCVModel.avgMetrics.max)
 
-      bm.write.overwrite().save("/tmp/bonjour")
-      val loaded = GBMClassificationModel.load("/tmp/bonjour")
-      assert(mce.evaluate(loaded.transform(data)) == mce.evaluate(bm.transform(data)))
+//       val bm = gbmcCVModel.bestModel.asInstanceOf[GBMClassificationModel]
 
-    }
+//       bm.write.overwrite().save("/tmp/bonjour")
+//       val loaded = GBMClassificationModel.load("/tmp/bonjour")
+//       assert(mce.evaluate(loaded.transform(data)) == mce.evaluate(bm.transform(data)))
 
-    time {
-      val paramGrid = new ParamGridBuilder()
-        .addGrid(rf.featureSubsetStrategy, Array("auto"))
-        .addGrid(rf.subsamplingRate, Array(0.7, 1))
-        .addGrid(rf.maxDepth, Array(10))
-        .build()
+//     }
 
-      val cv = new CrossValidator()
-        .setEstimator(rf)
-        .setEvaluator(mce)
-        .setEstimatorParamMaps(paramGrid)
-        .setNumFolds(3)
-        .setParallelism(4)
+//     time {
+//       val paramGrid = new ParamGridBuilder()
+//         .addGrid(rf.featureSubsetStrategy, Array("auto"))
+//         .addGrid(rf.subsamplingRate, Array(0.7, 1))
+//         .addGrid(rf.maxDepth, Array(10))
+//         .build()
 
-      val cvModel = cv.fit(data)
+//       val cv = new CrossValidator()
+//         .setEstimator(rf)
+//         .setEvaluator(mce)
+//         .setEstimatorParamMaps(paramGrid)
+//         .setNumFolds(3)
+//         .setParallelism(4)
 
-      println(cvModel.avgMetrics.mkString(","))
-      print(
-        cvModel.bestModel.asInstanceOf[RandomForestClassificationModel].getSubsamplingRate + ",")
-      println(cvModel.bestModel.asInstanceOf[RandomForestClassificationModel].getMaxDepth)
-      println(cvModel.avgMetrics.max)
-    }
+//       val cvModel = cv.fit(data)
 
-    time {
-      val paramGrid = new ParamGridBuilder()
-        .addGrid(dc.maxDepth, Array(10))
-        .build()
+//       println(cvModel.avgMetrics.mkString(","))
+//       print(
+//         cvModel.bestModel.asInstanceOf[RandomForestClassificationModel].getSubsamplingRate + ",")
+//       println(cvModel.bestModel.asInstanceOf[RandomForestClassificationModel].getMaxDepth)
+//       println(cvModel.avgMetrics.max)
+//     }
 
-      val cv = new CrossValidator()
-        .setEstimator(dc)
-        .setEvaluator(mce)
-        .setEstimatorParamMaps(paramGrid)
-        .setNumFolds(3)
-        .setParallelism(4)
+//     time {
+//       val paramGrid = new ParamGridBuilder()
+//         .addGrid(dc.maxDepth, Array(10))
+//         .build()
 
-      val cvModel = cv.fit(data)
+//       val cv = new CrossValidator()
+//         .setEstimator(dc)
+//         .setEvaluator(mce)
+//         .setEstimatorParamMaps(paramGrid)
+//         .setNumFolds(3)
+//         .setParallelism(4)
 
-      println(cvModel.avgMetrics.mkString(","))
-      println(cvModel.bestModel.asInstanceOf[DecisionTreeClassificationModel].getMaxDepth)
-      println(cvModel.avgMetrics.max)
-    }
-  }
+//       val cvModel = cv.fit(data)
 
-  def time[R](block: => R): R = {
-    val t0 = System.nanoTime()
-    val result = block // call-by-name
-    val t1 = System.nanoTime()
-    println("Elapsed time: " + (t1 - t0) + "ns")
-    result
-  }
+//       println(cvModel.avgMetrics.mkString(","))
+//       println(cvModel.bestModel.asInstanceOf[DecisionTreeClassificationModel].getMaxDepth)
+//       println(cvModel.avgMetrics.max)
+//     }
+//   }
 
-  test("trivial tasks") {
-    val dr = new DecisionTreeRegressor()
-    val br = new GBMClassifier()
-      .setBaseLearner(dr)
-      .setNumBaseLearners(20)
-    val x = Seq.fill(100)(Vectors.dense(Array(1.0, 1.0))) ++ Seq.fill(100)(
-      Vectors.dense(Array(0.0, 0.0)))
-    val y = Seq.fill(100)(1.0) ++ Seq.fill(100)(0.0)
-    import spark.implicits._
-    val data = spark.sparkContext.parallelize(x.zip(y)).toDF("features", "label")
-    val learned = br.fit(data)
-    learned.transform(data).show()
-  }
+//   def time[R](block: => R): R = {
+//     val t0 = System.nanoTime()
+//     val result = block // call-by-name
+//     val t1 = System.nanoTime()
+//     println("Elapsed time: " + (t1 - t0) + "ns")
+//     result
+//   }
 
-}
+//   test("trivial tasks") {
+//     val dr = new DecisionTreeRegressor()
+//     val br = new GBMClassifier()
+//       .setBaseLearner(dr)
+//       .setNumBaseLearners(20)
+//     val x = Seq.fill(100)(Vectors.dense(Array(1.0, 1.0))) ++ Seq.fill(100)(
+//       Vectors.dense(Array(0.0, 0.0)))
+//     val y = Seq.fill(100)(1.0) ++ Seq.fill(100)(0.0)
+//     import spark.implicits._
+//     val data = spark.sparkContext.parallelize(x.zip(y)).toDF("features", "label")
+//     val learned = br.fit(data)
+//     learned.transform(data).show()
+//   }
+
+// }

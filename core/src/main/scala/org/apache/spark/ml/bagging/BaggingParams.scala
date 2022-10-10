@@ -28,6 +28,6 @@ private[ml] trait BaggingParams
     with HasBaseLearner
     with HasSubBag {
 
-  setDefault(numBaseLearners -> 10)
+  setDefault(numBaseLearners -> 20)
 
 }

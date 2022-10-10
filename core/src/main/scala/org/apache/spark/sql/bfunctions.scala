@@ -16,7 +16,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.expressions.{Poisson, PoissonN, Rand, Slice}
+import org.apache.spark.sql.catalyst.expressions.{Poisson, Rand, Slice}
 import org.apache.spark.sql.functions.{array, array_repeat, explode, expr, lit}
 import org.apache.spark.sql.types.IntegerType
 
@@ -29,12 +29,6 @@ object bfunctions {
   def poisson(lambda: Double, seed: Column) = Column(Poisson(lambda, seed))
 
   def poisson(lambda: Double, seed: Long) = Column(Poisson(lambda, seed))
-
-  def poisson_n(lambda: Column, seed: Column) = Column(PoissonN(lambda, seed))
-
-  def poisson_n(lambda: Double, seed: Column) = Column(PoissonN(lambda, seed))
-
-  def poisson_n(lambda: Double, seed: Long) = Column(PoissonN(lambda, seed))
 
   def slice(x: Column, start: Column, length: Column): Column =
     Column(Slice(x.expr, start.expr, length.expr))

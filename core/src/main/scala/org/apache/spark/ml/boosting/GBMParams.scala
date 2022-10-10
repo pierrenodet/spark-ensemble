@@ -24,7 +24,6 @@ import breeze.optimize.{LBFGS => BreezeLBFGS}
 import breeze.optimize.{LBFGSB => BreezeLBFGSB}
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.classification.GBMClassificationModel
-import org.apache.spark.ml.ensemble.HasSubBag.SubSpace
 import org.apache.spark.ml.ensemble._
 import org.apache.spark.ml.functions.vector_to_array
 import org.apache.spark.ml.linalg.BLAS
