@@ -63,6 +63,7 @@ class BaggingRegressorSuite extends AnyFunSuite with BeforeAndAfterAll {
           .setMaster("local[*]")
           .setAppName("example"))
       .getOrCreate()
+    spark.sparkContext.setLogLevel("ERROR")
 
   }
 

@@ -68,6 +68,7 @@ class HasSubBagSuite extends AnyFunSuite with BeforeAndAfterAll with ScalaCheckP
           .setMaster("local[*]")
           .setAppName("example"))
       .getOrCreate()
+    spark.sparkContext.setLogLevel("ERROR")
 
   }
 
