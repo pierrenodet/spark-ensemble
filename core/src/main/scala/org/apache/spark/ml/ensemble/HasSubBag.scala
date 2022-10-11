@@ -15,18 +15,22 @@
  */
 
 package org.apache.spark.ml.ensemble
-import java.util.UUID
-import scala.util.Random
-
 import org.apache.spark.SparkException
 import org.apache.spark.ml.feature.VectorSlicer
-import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
+import org.apache.spark.ml.linalg.DenseVector
+import org.apache.spark.ml.linalg.SparseVector
+import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.HasSeed
+import org.apache.spark.ml.util.MetadataUtils
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.bfunctions._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.ml.util.MetadataUtils
+
+import java.util.UUID
+import scala.util.Random
 
 private[ml] trait HasSubBag extends Params with HasSeed {
 

@@ -18,6 +18,7 @@ package org.apache.spark.ml.classification
 import org.apache.spark._
 import org.apache.spark.ml.Model
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
+import org.apache.spark.ml.regression.DecisionTreeRegressor
 import org.apache.spark.ml.tuning.CrossValidator
 import org.apache.spark.ml.tuning.ParamGridBuilder
 import org.apache.spark.ml.tuning.TrainValidationSplit
@@ -28,7 +29,6 @@ import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuite
 
 import scala.collection.mutable.ListBuffer
-import org.apache.spark.ml.regression.DecisionTreeRegressor
 
 class BaggingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
 
@@ -57,7 +57,7 @@ class BaggingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
       spark.read.format("libsvm").load("data/vehicle/vehicle.svm").cache()
     data.count()
 
-    val lr = new LogisticRegression()
+    val lr = new DecisionTreeClassifier()
     val bc = new BaggingClassifier()
       .setBaseLearner(lr)
       .setNumBaseLearners(10)
@@ -85,7 +85,7 @@ class BaggingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
       spark.read.format("libsvm").load("data/vehicle/vehicle.svm").cache()
     data.count()
 
-    val lr = new LogisticRegression()
+    val lr = new DecisionTreeClassifier()
     val bc = new BaggingClassifier()
       .setBaseLearner(lr)
       .setNumBaseLearners(10)
@@ -114,7 +114,7 @@ class BaggingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
       spark.read.format("libsvm").load("data/vehicle/vehicle.svm").cache()
     data.count()
 
-    val lr = new LogisticRegression()
+    val lr = new DecisionTreeClassifier()
     val bc = new BaggingClassifier()
       .setBaseLearner(lr)
       .setNumBaseLearners(10)
@@ -151,7 +151,7 @@ class BaggingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
       spark.read.format("libsvm").load("data/vehicle/vehicle.svm").cache()
     data.count()
 
-    val lr = new LogisticRegression()
+    val lr = new DecisionTreeClassifier()
     val bc = new BaggingClassifier()
       .setBaseLearner(lr)
       .setNumBaseLearners(1)

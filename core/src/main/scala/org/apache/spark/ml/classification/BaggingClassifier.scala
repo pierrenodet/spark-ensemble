@@ -18,12 +18,16 @@ package org.apache.spark.ml.classification
 
 import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
+import org.apache.spark.SparkException
 import org.apache.spark.ml.PredictionModel
 import org.apache.spark.ml.Predictor
 import org.apache.spark.ml.bagging._
 import org.apache.spark.ml.ensemble._
 import org.apache.spark.ml.feature.VectorSlicer
+import org.apache.spark.ml.linalg.BLAS
 import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.param.Param
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.ParamPair
 import org.apache.spark.ml.param.shared.HasWeightCol
@@ -37,15 +41,38 @@ import org.json4s.JObject
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
+import java.util.Locale
 import java.util.UUID
 import scala.concurrent.Future
 import scala.concurrent.duration.Duration
-import org.apache.spark.ml.linalg.Vectors
-import org.apache.spark.ml.linalg.BLAS
 
-private[ml] trait BaggingClassifierParams extends BaggingParams with ClassifierParams {}
+private[ml] trait BaggingClassifierParams extends BaggingParams with ClassifierParams {
+
+  /**
+   * Voting votingStrategy to aggregate predictions of base classifiers. (case-insensitive)
+   * Supported: "hard", "soft". (default = hard)
+   *
+   * @group param
+   */
+  val votingStrategy: Param[String] =
+    new Param(
+      this,
+      "votingStrategy",
+      "voting strategy, (case-insensitive). Supported options:" + s"${BaggingClassifierParams.supportedVotingStrategy
+          .mkString(",")}",
+      (value: String) =>
+        BaggingClassifierParams.supportedVotingStrategy.contains(value.toLowerCase(Locale.ROOT)))
+
+  /** @group getParam */
+  def getVotingStrategy: String = $(votingStrategy).toLowerCase(Locale.ROOT)
+
+  setDefault(votingStrategy -> "hard")
+}
 
 private[ml] object BaggingClassifierParams {
+
+  final val supportedVotingStrategy: Array[String] =
+    Array("soft", "hard").map(_.toLowerCase(Locale.ROOT))
 
   def saveImpl(
       instance: BaggingClassifierParams,
@@ -89,7 +116,8 @@ class BaggingClassifier(override val uid: String)
   def setBaseLearner(value: Classifier[_, _, _]): this.type =
     set(baseLearner, value.asInstanceOf[EnsembleClassifierType])
 
-  override def getBaseLearner: EnsembleClassifierType = $(baseLearner).asInstanceOf[EnsembleClassifierType]
+  override def getBaseLearner: EnsembleClassifierType =
+    $(baseLearner).asInstanceOf[EnsembleClassifierType]
 
   /** @group setParam */
   def setWeightCol(value: String): this.type = set(weightCol, value)
@@ -102,6 +130,9 @@ class BaggingClassifier(override val uid: String)
 
   /** @group setParam */
   def setSubspaceRatio(value: Double): this.type = set(subspaceRatio, value)
+
+  /** @group setParam */
+  def setVotingStrategy(value: String): this.type = set(votingStrategy, value)
 
   /** @group setParam */
   def setNumBaseLearners(value: Int): this.type = set(numBaseLearners, value)
@@ -262,7 +293,7 @@ class BaggingClassificationModel(
       val model = models(i)
       val subspace = subspaces(i)
       model match {
-        case model: ProbabilisticClassificationModel[_, _] =>
+        case model: ProbabilisticClassificationModel[_, _] if (getVotingStrategy == "soft") =>
           BLAS.axpy(1.0, model.predictProbability(slicer(subspace)(features)), res)
         case model: ClassificationModel[_, _] =>
           BLAS.axpy(
@@ -272,6 +303,9 @@ class BaggingClassificationModel(
               Array(model.predict(slicer(subspace)(features)).toInt),
               Array(1.0)),
             res)
+        case _ =>
+          throw new SparkException(
+            "BaggingClassificationModel requires ClassificationModel as base classifiers.")
       }
       i += 1
     }
