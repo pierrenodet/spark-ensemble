@@ -5,7 +5,7 @@ module.exports = {
       "bagging",
       "boosting",
       "stacking",
-      "gbm", 
+      "gbm",
       "exemple",
     ],
   },

@@ -17,15 +17,19 @@
 package org.apache.spark.ml.bagging
 
 import org.apache.spark.ml.PredictorParams
-import org.apache.spark.ml.ensemble.{HasBaseLearner, HasNumBaseLearners, HasSubBag}
-import org.apache.spark.ml.param.shared.{HasParallelism, HasWeightCol}
+import org.apache.spark.ml.ensemble.EnsemblePredictorType
+import org.apache.spark.ml.ensemble.HasBaseLearner
+import org.apache.spark.ml.ensemble.HasNumBaseLearners
+import org.apache.spark.ml.ensemble.HasSubBag
+import org.apache.spark.ml.param.shared.HasParallelism
+import org.apache.spark.ml.param.shared.HasWeightCol
 
-private[ml] trait BaggingParams
+private[ml] trait BaggingParams[L <: EnsemblePredictorType]
     extends PredictorParams
     with HasNumBaseLearners
     with HasParallelism
     with HasWeightCol
-    with HasBaseLearner
+    with HasBaseLearner[L]
     with HasSubBag {
 
   setDefault(numBaseLearners -> 20)

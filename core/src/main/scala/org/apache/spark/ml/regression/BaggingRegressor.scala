@@ -18,20 +18,16 @@ package org.apache.spark.ml.regression
 
 import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
-import org.apache.spark.ml.Predictor
 import org.apache.spark.ml.bagging.BaggingParams
 import org.apache.spark.ml.ensemble.EnsemblePredictionModelType
-import org.apache.spark.ml.ensemble.EnsemblePredictorType
+import org.apache.spark.ml.ensemble.EnsembleRegressorType
 import org.apache.spark.ml.ensemble.HasBaseLearner
-import org.apache.spark.ml.feature.VectorSlicer
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.Column
 import org.apache.spark.sql._
-import org.apache.spark.sql.functions._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ThreadUtils
 import org.json4s.DefaultFormats
@@ -39,11 +35,10 @@ import org.json4s.JObject
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import java.util.UUID
 import scala.concurrent.Future
 import scala.concurrent.duration.Duration
 
-private[ml] trait BaggingRegressorParams extends BaggingParams {}
+private[ml] trait BaggingRegressorParams extends BaggingParams[EnsembleRegressorType] {}
 
 private[ml] object BaggingRegressorParams {
 
@@ -68,10 +63,10 @@ private[ml] object BaggingRegressorParams {
   def loadImpl(
       path: String,
       sc: SparkContext,
-      expectedClassName: String): (DefaultParamsReader.Metadata, EnsemblePredictorType) = {
+      expectedClassName: String): (DefaultParamsReader.Metadata, EnsembleRegressorType) = {
 
     val metadata = DefaultParamsReader.loadMetadata(path, sc, expectedClassName)
-    val learner = HasBaseLearner.loadImpl(path, sc)
+    val learner = HasBaseLearner.loadImpl[EnsembleRegressorType](path, sc)
     (metadata, learner)
 
   }
@@ -79,15 +74,15 @@ private[ml] object BaggingRegressorParams {
 }
 
 class BaggingRegressor(override val uid: String)
-    extends Predictor[Vector, BaggingRegressor, BaggingRegressionModel]
+    extends Regressor[Vector, BaggingRegressor, BaggingRegressionModel]
     with BaggingRegressorParams
     with MLWritable {
 
   def this() = this(Identifiable.randomUID("BaggingRegressor"))
 
   /** @group setParam */
-  def setBaseLearner(value: Predictor[_, _, _]): this.type =
-    set(baseLearner, value.asInstanceOf[EnsemblePredictorType])
+  def setBaseLearner(value: EnsembleRegressorType): this.type =
+    set(baseLearner, value)
 
   /** @group setParam */
   def setWeightCol(value: String): this.type = set(weightCol, value)
@@ -183,7 +178,6 @@ class BaggingRegressor(override val uid: String)
                 getFeaturesCol,
                 getPredictionCol,
                 optWeightColName)(subbagged)
-
             (subspace, bagger)
 
           }(getExecutionContext))

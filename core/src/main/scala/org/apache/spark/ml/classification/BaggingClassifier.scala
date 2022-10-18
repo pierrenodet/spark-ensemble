@@ -19,11 +19,8 @@ package org.apache.spark.ml.classification
 import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkException
-import org.apache.spark.ml.PredictionModel
-import org.apache.spark.ml.Predictor
 import org.apache.spark.ml.bagging._
 import org.apache.spark.ml.ensemble._
-import org.apache.spark.ml.feature.VectorSlicer
 import org.apache.spark.ml.linalg.BLAS
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.linalg.Vectors
@@ -42,15 +39,16 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import java.util.Locale
-import java.util.UUID
 import scala.concurrent.Future
 import scala.concurrent.duration.Duration
 
-private[ml] trait BaggingClassifierParams extends BaggingParams with ClassifierParams {
+private[ml] trait BaggingClassifierParams
+    extends BaggingParams[EnsembleClassifierType]
+    with ClassifierParams {
 
   /**
-   * Voting votingStrategy to aggregate predictions of base classifiers. (case-insensitive)
-   * Supported: "hard", "soft". (default = hard)
+   * Voting strategy to aggregate predictions of base classifiers. (case-insensitive) Supported:
+   * "hard", "soft". (default = hard)
    *
    * @group param
    */
@@ -98,7 +96,7 @@ private[ml] object BaggingClassifierParams {
       expectedClassName: String): (DefaultParamsReader.Metadata, EnsembleClassifierType) = {
 
     val metadata = DefaultParamsReader.loadMetadata(path, sc, expectedClassName)
-    val learner = HasBaseLearner.loadImpl(path, sc).asInstanceOf[EnsembleClassifierType]
+    val learner = HasBaseLearner.loadImpl[EnsembleClassifierType](path, sc)
     (metadata, learner)
 
   }
@@ -113,11 +111,8 @@ class BaggingClassifier(override val uid: String)
   def this() = this(Identifiable.randomUID("BaggingClassifier"))
 
   /** @group setParam */
-  def setBaseLearner(value: Classifier[_, _, _]): this.type =
-    set(baseLearner, value.asInstanceOf[EnsembleClassifierType])
-
-  override def getBaseLearner: EnsembleClassifierType =
-    $(baseLearner).asInstanceOf[EnsembleClassifierType]
+  def setBaseLearner(value: EnsembleClassifierType): this.type =
+    set(baseLearner, value)
 
   /** @group setParam */
   def setWeightCol(value: String): this.type = set(weightCol, value)
@@ -168,7 +163,7 @@ class BaggingClassifier(override val uid: String)
         seed)
 
       val weightColIsUsed = isDefined(weightCol) && $(weightCol).nonEmpty && {
-        getBaseLearner match {
+        $(baseLearner) match {
           case _: HasWeightCol => true
           case c =>
             instr.logWarning(s"weightCol is ignored, as it is not supported by $c now.")
@@ -194,32 +189,32 @@ class BaggingClassifier(override val uid: String)
         df.persist(StorageLevel.MEMORY_AND_DISK)
       }
 
-      val numFeatures = MetadataUtils.getNumFeatures(df, getFeaturesCol)
+      val numFeatures = MetadataUtils.getNumFeatures(df, $(featuresCol))
 
-      val numClasses = getNumClasses(df, maxNumClasses = numFeatures)
+      val numClasses = getNumClasses(df)
       instr.logNumClasses(numClasses)
       validateNumClasses(numClasses)
 
       val futureModels = Array
-        .range(0, getNumBaseLearners)
+        .range(0, $(numBaseLearners))
         .map(iter =>
-          Future[(Array[Int], EnsembleClassificationModelType)] {
+          Future[(Array[Int], EnsemblePredictionModelType)] {
 
             val (subspace, subbagged) = subbag(
-              getFeaturesCol,
-              getReplacement,
-              getSubsampleRatio,
-              getSubspaceRatio,
+              $(featuresCol),
+              $(replacement),
+              $(subsampleRatio),
+              $(subsampleRatio),
               numFeatures,
-              getSeed + iter)(df)
+              $(seed) + iter)(df)
 
             val bagger =
               fitBaseLearner(
-                getBaseLearner,
-                getLabelCol,
-                getFeaturesCol,
-                getPredictionCol,
-                optWeightColName)(subbagged).asInstanceOf[EnsembleClassificationModelType]
+                $(baseLearner),
+                $(labelCol),
+                $(featuresCol),
+                $(predictionCol),
+                optWeightColName)(subbagged)
 
             (subspace, bagger)
 
@@ -273,7 +268,7 @@ class BaggingClassificationModel(
     override val uid: String,
     override val numClasses: Int,
     val subspaces: Array[Array[Int]],
-    val models: Array[EnsembleClassificationModelType])
+    val models: Array[EnsemblePredictionModelType])
     extends ProbabilisticClassificationModel[Vector, BaggingClassificationModel]
     with BaggingClassifierParams
     with MLWritable {
@@ -281,35 +276,34 @@ class BaggingClassificationModel(
   def this(
       numClasses: Int,
       subspaces: Array[Array[Int]],
-      models: Array[EnsembleClassificationModelType]) =
+      models: Array[EnsemblePredictionModelType]) =
     this(Identifiable.randomUID("BaggingClassificationModel"), numClasses, subspaces, models)
 
   val numBaseModels: Int = models.length
 
   override def predictRaw(features: Vector): Vector = {
-    val res = Vectors.zeros(numClasses)
+    val rawPredictions = Vectors.zeros(numClasses)
     var i = 0
     while (i < numBaseModels) {
       val model = models(i)
       val subspace = subspaces(i)
-      model match {
-        case model: ProbabilisticClassificationModel[_, _] if (getVotingStrategy == "soft") =>
-          BLAS.axpy(1.0, model.predictProbability(slicer(subspace)(features)), res)
-        case model: ClassificationModel[_, _] =>
-          BLAS.axpy(
-            1.0,
-            Vectors.sparse(
-              numClasses,
-              Array(model.predict(slicer(subspace)(features)).toInt),
-              Array(1.0)),
-            res)
+      val rawPrediction = model match {
+        case model: ProbabilisticClassificationModel[Vector, _]
+            if ($(votingStrategy) == "soft") =>
+          model.predictProbability(slicer(subspace)(features))
+        case model: ClassificationModel[Vector, _] if ($(votingStrategy) == "hard") =>
+          Vectors.sparse(
+            numClasses,
+            Array(model.predict(slicer(subspace)(features)).toInt),
+            Array(1.0))
         case _ =>
-          throw new SparkException(
-            "BaggingClassificationModel requires ClassificationModel as base classifiers.")
+          throw new SparkException(s"""voting strategy "${$(
+              votingStrategy)}" is not compatible with base learner "${$(baseLearner)}".""")
       }
+      BLAS.axpy(1.0, rawPrediction, rawPredictions)
       i += 1
     }
-    res
+    rawPredictions
   }
 
   override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
@@ -366,7 +360,7 @@ object BaggingClassificationModel extends MLReadable[BaggingClassificationModel]
       val numClasses = (metadata.metadata \ "numClasses").extract[Int]
       val models = (0 until numModels).toArray.map { idx =>
         val modelPath = new Path(path, s"model-$idx").toString
-        DefaultParamsReader.loadParamsInstance[EnsembleClassificationModelType](modelPath, sc)
+        DefaultParamsReader.loadParamsInstance[EnsemblePredictionModelType](modelPath, sc)
       }
       val subspaces = (0 until numModels).toArray.map { idx =>
         val dataPath = new Path(path, s"data-$idx").toString

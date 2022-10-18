@@ -14,109 +14,180 @@
  * limitations under the License.
  */
 
-// package org.apache.spark.ml.regression
+package org.apache.spark.ml.regression
 
-// import com.holdenkarau.spark.testing.DatasetSuiteBase
-// import org.apache.spark.ml.evaluation.RegressionEvaluator
-// import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
-// import org.apache.spark.sql.functions.{rand, when}
-// import org.scalatest.FunSuite
-// import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.SparkConf
+import org.apache.spark.ml.evaluation.RegressionEvaluator
+import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.sql.SparkSession
+import org.scalatest.BeforeAndAfterAll
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.matchers.should.Matchers._
 
-// class BoostingRegressorSuite extends FunSuite with DatasetSuiteBase {
+import scala.collection.mutable.ListBuffer
 
-//   test("benchmark") {
+class BoostingRegressorSuite extends AnyFunSuite with BeforeAndAfterAll {
 
-//     val raw = spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm")
+  var spark: SparkSession = _
 
-//     val dr = new DecisionTreeRegressor()
-//     val br = new BoostingRegressor()
-//       .setBaseLearner(dr)
-//     val gbt = new GBTRegressor()
+  override def beforeAll() {
 
-//     val re = new RegressionEvaluator()
-//       .setLabelCol("label")
-//       .setPredictionCol("prediction")
-//       .setMetricName("rmse")
+    spark = SparkSession
+      .builder()
+      .config(
+        new SparkConf()
+          .setMaster("local[*]")
+          .setAppName("example"))
+      .getOrCreate()
+    spark.sparkContext.setCheckpointDir("checkpoint")
+    spark.sparkContext.setLogLevel("ERROR")
 
-//     val data = raw.withColumn("val", when(rand() > 0.8, true).otherwise(false))
-//     data.cache().first()
+  }
 
-//     time {
-//       val brParamGrid = new ParamGridBuilder()
-//         .addGrid(br.loss, Array("squared", "exponential"))
-//         .addGrid(br.validationIndicatorCol, Array("val"))
-//         .addGrid(br.numBaseLearners, Array(20))
-//         .addGrid(br.tol, Array(1e-9))
-//         .addGrid(br.numRound, Array(3))
-//         .addGrid(dr.maxDepth, Array(10))
-//         .build()
+  override def afterAll() {
+    spark.stop()
+  }
 
-//       val brCV = new CrossValidator()
-//         .setEstimator(br)
-//         .setEvaluator(re)
-//         .setEstimatorParamMaps(brParamGrid)
-//         .setNumFolds(3)
-//         .setParallelism(4)
+  // test("benchmark") {
 
-//       val brCVModel = brCV.fit(data)
+  //   val raw =
+  //     spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm")
+  //   val data = Seq.fill(200)(raw).reduce(_ union _).checkpoint()
+  //   data.count()
 
-//       println(brCVModel.avgMetrics.mkString(","))
-//       println(brCVModel.bestModel.asInstanceOf[BoostingRegressionModel].getLoss)
-//       println(brCVModel.bestModel.asInstanceOf[BoostingRegressionModel].models.length)
-//       println(brCVModel.bestModel.asInstanceOf[BoostingRegressionModel].weights.mkString(","))
-//       println(brCVModel.avgMetrics.min)
+  //   val dtr = new DecisionTreeRegressor()
+  //   val br = new BoostingRegressor()
+  //     .setBaseLearner(dtr)
+  //     .setNumBaseLearners(10)
+  //   val gbtr = new GBTRegressor().setMaxIter(10)
 
-//       val bm = brCVModel.bestModel.asInstanceOf[BoostingRegressionModel]
-//       bm.write.overwrite().save("/tmp/bonjour")
-//       val loaded = BoostingRegressionModel.load("/tmp/bonjour")
-//       assert(re.evaluate(loaded.transform(data)) == re.evaluate(bm.transform(data)))
+  //   val re = new RegressionEvaluator().setMetricName("rmse")
 
-//     }
+  //   val splits = data.randomSplit(Array(0.7, 0.3), 0L)
+  //   val (train, test) = (splits(0), splits(1))
 
-//     time {
-//       val paramGrid = new ParamGridBuilder()
-//         .addGrid(gbt.featureSubsetStrategy, Array("auto"))
-//         .addGrid(gbt.validationIndicatorCol, Array("val"))
-//         .addGrid(gbt.subsamplingRate, Array(0.3, 0.5, 0.7, 1))
-//         .addGrid(gbt.maxIter, Array(20))
-//         .build()
+  //   val dtrModel = spark.time(dtr.fit(train))
+  //   val brModel = spark.time(br.fit(train))
+  //   val gbtrModel = spark.time(gbtr.fit(train))
 
-//       val cv = new CrossValidator()
-//         .setEstimator(gbt)
-//         .setEvaluator(re)
-//         .setEstimatorParamMaps(paramGrid)
-//         .setNumFolds(3)
-//         .setParallelism(4)
+  // }
 
-//       val cvModel = cv.fit(data)
+  test("boosting regressor is better than baseline regressor") {
 
-//       println(cvModel.avgMetrics.mkString(","))
-//       println(cvModel.bestModel.asInstanceOf[GBTRegressionModel].getSubsamplingRate)
-//       println(cvModel.bestModel.asInstanceOf[GBTRegressionModel].getNumTrees)
-//       println(cvModel.avgMetrics.min)
-//     }
-//   }
+    val data =
+      spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm").cache()
 
-//   def time[R](block: => R): R = {
-//     val t0 = System.nanoTime()
-//     val result = block // call-by-name
-//     val t1 = System.nanoTime()
-//     println("Elapsed time: " + (t1 - t0) + "ns")
-//     result
-//   }
+    data.count()
 
-//   test("maxErrorIsNull") {
-//     val dr = new DecisionTreeRegressor()
-//     val br = new BoostingRegressor()
-//       .setBaseLearner(dr)
-//       .setNumBaseLearners(20)
-//     val x = Seq.fill(100)(Vectors.dense(Array(1.0, 1.0)))
-//     val y = Seq.fill(100)(1.0)
-//     import spark.implicits._
-//     val data = spark.sparkContext.parallelize(x.zip(y)).toDF("features", "label")
-//     val learned = br.fit(data)
-//     learned.transform(data).show()
-//   }
+    val dtr = new DecisionTreeRegressor()
+    val br = new BoostingRegressor()
+      .setBaseLearner(dtr)
+      .setNumBaseLearners(10)
+    val gbtr = new GBTRegressor().setMaxIter(10)
 
-// }
+    val re = new RegressionEvaluator().setMetricName("rmse")
+
+    val splits = data.randomSplit(Array(0.8, 0.2), 0L)
+    val (train, test) = (splits(0), splits(1))
+
+    val dtrModel = spark.time(dtr.fit(train))
+    val brModel = spark.time(br.fit(train))
+    val gbtrModel = spark.time(gbtr.fit(train))
+
+    assert(re.evaluate(dtrModel.transform(test)) > re.evaluate(brModel.transform(test)))
+    assert(re.evaluate(gbtrModel.transform(test)) > re.evaluate(brModel.transform(test)))
+
+  }
+
+  test("more base learners improves performance") {
+
+    val data =
+      spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm").cache()
+    data.count()
+
+    val dtr = new DecisionTreeRegressor().setMaxDepth(10)
+    val br = new BoostingRegressor()
+      .setBaseLearner(dtr)
+      .setNumBaseLearners(10)
+
+    val re = new RegressionEvaluator().setMetricName("rmse")
+
+    val splits = data.randomSplit(Array(0.8, 0.2), 0L)
+    val (train, test) = (splits(0), splits(1))
+
+    val brModel = br.fit(train)
+
+    val metrics = ListBuffer.empty[Double]
+    Array
+      .range(1, brModel.numModels + 1)
+      .foreach(i => {
+        val model = new BoostingRegressionModel(brModel.weights.take(i), brModel.models.take(i))
+        metrics += re.evaluate(model.transform(test))
+      })
+
+    assert(
+      metrics.toList
+        .sliding(2)
+        .collect { case (h :: t) => h >= t.head }
+        .count(identity) / (metrics.size - 1.0) >= 0.77)
+  }
+
+  test("weighted median is same as weighted mean") {
+
+    val data =
+      spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm").cache()
+    data.count()
+
+    val dtr = new DecisionTreeRegressor().setMaxDepth(10)
+    val br = new BoostingRegressor()
+      .setBaseLearner(dtr)
+      .setNumBaseLearners(10)
+
+    val re = new RegressionEvaluator().setMetricName("rmse")
+
+    val splits = data.randomSplit(Array(0.8, 0.2), 0L)
+    val (train, test) = (splits(0), splits(1))
+
+    val brModel = br.fit(train)
+    val metric = re.evaluate(brModel.transform(test))
+    val metricMean = re.evaluate(brModel.set(brModel.votingStrategy, "mean").transform(test))
+
+    assert(metric === metricMean +- 0.1)
+  }
+
+  test("read/write") {
+    val data =
+      spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm").cache()
+    data.count()
+
+    val dtr = new DecisionTreeRegressor()
+    val br = new BoostingRegressor()
+      .setBaseLearner(dtr)
+      .setNumBaseLearners(5)
+
+    val splits = data.randomSplit(Array(0.8, 0.2), 0L)
+    val (train, test) = (splits(0), splits(1))
+
+    val brModel = br.fit(train)
+    brModel.write.overwrite().save("/tmp/kek")
+    val loaded = BoostingRegressionModel.load("/tmp/kek")
+
+    assert(brModel.transform(test).collect() === loaded.transform(test).collect())
+  }
+
+  test("maxErrorIsNull") {
+    val dtr = new DecisionTreeRegressor()
+    val br = new BoostingRegressor()
+      .setBaseLearner(dtr)
+      .setNumBaseLearners(20)
+    val x = Seq.fill(100)(Vectors.dense(Array(1.0, 1.0)))
+    val y = Seq.fill(100)(1.0)
+    val data =
+      spark.createDataFrame(spark.sparkContext.parallelize(x.zip(y))).toDF("features", "label")
+    val learned = br.fit(data)
+    val re = new RegressionEvaluator().setMetricName("rmse")
+    assert(re.evaluate(learned.transform(data)) == 0.0)
+    assert(learned.models.size < 20)
+  }
+
+}

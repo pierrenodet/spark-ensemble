@@ -16,19 +16,11 @@
 
 package org.apache.spark.ml.regression
 import org.apache.spark._
-import org.apache.spark.ml.Model
-import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
 import org.apache.spark.ml.evaluation.RegressionEvaluator
 import org.apache.spark.ml.regression.BaggingRegressionModel
 import org.apache.spark.ml.regression.BaggingRegressor
 import org.apache.spark.ml.regression.DecisionTreeRegressor
-import org.apache.spark.ml.regression.LinearRegression
-import org.apache.spark.ml.tuning.CrossValidator
-import org.apache.spark.ml.tuning.ParamGridBuilder
-import org.apache.spark.ml.tuning.TrainValidationSplit
-import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql._
-import org.apache.spark.sql.functions._
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -64,20 +56,23 @@ class BaggingRegressorSuite extends AnyFunSuite with BeforeAndAfterAll {
     val dt = new DecisionTreeRegressor()
     val br = new BaggingRegressor()
       .setBaseLearner(dt)
-      .setNumBaseLearners(5)
+      .setNumBaseLearners(10)
       .setReplacement(true)
       .setSubsampleRatio(0.6)
       .setParallelism(4)
+    val rf = new RandomForestRegressor().setNumTrees(10).setSubsamplingRate(0.6)
 
     val re = new RegressionEvaluator().setMetricName("rmse")
 
     val splits = data.randomSplit(Array(0.8, 0.2), 0L)
     val (train, test) = (splits(0), splits(1))
 
-    val dtModel = dt.fit(train)
-    val brModel = br.fit(train)
+    val dtModel = spark.time(dt.fit(train))
+    val brModel = spark.time(br.fit(train))
+    val rfModel = spark.time(rf.fit(train))
 
     assert(re.evaluate(dtModel.transform(test)) > re.evaluate(brModel.transform(test)))
+    assert(re.evaluate(rfModel.transform(test)) > re.evaluate(brModel.transform(test)))
 
   }
 
@@ -110,29 +105,6 @@ class BaggingRegressorSuite extends AnyFunSuite with BeforeAndAfterAll {
   }
 
   test("read/write") {
-    val data =
-      spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm").cache()
-    data.count()
-
-    val dt = new DecisionTreeRegressor()
-    val br = new BaggingRegressor()
-      .setBaseLearner(dt)
-      .setNumBaseLearners(1)
-      .setReplacement(true)
-      .setSubsampleRatio(0.4)
-      .setParallelism(4)
-
-    val splits = data.randomSplit(Array(0.8, 0.2), 0L)
-    val (train, test) = (splits(0), splits(1))
-
-    val brModel = br.fit(train)
-    brModel.write.overwrite().save("/tmp/kek")
-    val loaded = BaggingRegressionModel.load("/tmp/kek")
-
-    assert(brModel.transform(test).collect() === loaded.transform(test).collect())
-  }
-
-  test("bagging regressor with classifier should not work") {
     val data =
       spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm").cache()
     data.count()

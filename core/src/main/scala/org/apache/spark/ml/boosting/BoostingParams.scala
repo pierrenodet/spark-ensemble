@@ -15,191 +15,21 @@
  */
 
 package org.apache.spark.ml.boosting
-import org.apache.commons.math3.distribution.PoissonDistribution
 import org.apache.spark.ml.PredictorParams
-import org.apache.spark.ml.classification.BoostingClassificationModel
-import org.apache.spark.ml.ensemble.EnsemblePredictionModelType
+import org.apache.spark.ml.ensemble.EnsemblePredictorType
 import org.apache.spark.ml.ensemble.HasBaseLearner
 import org.apache.spark.ml.ensemble.HasNumBaseLearners
-import org.apache.spark.ml.ensemble.HasNumRound
-import org.apache.spark.ml.param.shared.HasSeed
-import org.apache.spark.ml.param.shared.HasTol
-import org.apache.spark.ml.param.shared.HasValidationIndicatorCol
+import org.apache.spark.ml.param.shared.HasCheckpointInterval
 import org.apache.spark.ml.param.shared.HasWeightCol
-import org.apache.spark.ml.regression.BoostingRegressionModel
-import org.apache.spark.ml.util.Instrumentation
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.functions._
 
-import scala.util.Try
-
-private[ml] trait BoostingParams
+private[ml] trait BoostingParams[L <: EnsemblePredictorType]
     extends PredictorParams
     with HasNumBaseLearners
     with HasWeightCol
-    with HasSeed
-    with HasBaseLearner
-    with HasValidationIndicatorCol
-    with HasTol
-    with HasNumRound {
+    with HasBaseLearner[L]
+    with HasCheckpointInterval {
 
-  setDefault(numRound -> 2)
-  setDefault(numBaseLearners -> 10)
-  setDefault(tol -> 1e-6)
-
-  protected def evaluateOnValidation(
-      weights: Array[Double],
-      boosters: Array[EnsemblePredictionModelType],
-      labelColName: String,
-      featuresColName: String,
-      loss: Double => Double)(df: DataFrame): Double = {
-    val model = new BoostingRegressionModel(weights, boosters).setFeaturesCol(featuresColName)
-    val lossUDF = udf(loss)
-    if (df.isEmpty) {
-      Double.MaxValue
-    } else {
-      model
-        .transform(df)
-        .agg(sum(lossUDF(abs(col(labelColName) - col(model.getPredictionCol)))))
-        .head()
-        .getDouble(0)
-    }
-  }
-
-  protected def evaluateOnValidation(
-      numClasses: Int,
-      weights: Array[Double],
-      boosters: Array[EnsemblePredictionModelType],
-      labelColName: String,
-      featuresColName: String,
-      loss: Double => Double)(df: DataFrame): Double = {
-    val model = new BoostingRegressionModel(weights, boosters).setFeaturesCol(featuresColName)
-    val lossUDF = udf(loss)
-    if (df.isEmpty) {
-      Double.MaxValue
-    } else {
-      model
-        .transform(df)
-        .agg(sum(
-          lossUDF(when(col(labelColName) === col(model.getPredictionCol), 0.0).otherwise(1.0))))
-        .head()
-        .getDouble(0)
-    }
-  }
-
-  protected def probabilize(
-      boostWeightColName: String,
-      boostProbaColName: String,
-      poissonProbaColName: String)(df: DataFrame): DataFrame = {
-    val agg = df.agg(count(lit(1)), sum(boostWeightColName)).first()
-    val (numLines, sumWeights) = (agg.getLong(0).toDouble, agg.getDouble(1))
-
-    df.withColumn(boostProbaColName, col(boostWeightColName) / sumWeights)
-      .withColumn(poissonProbaColName, col(boostProbaColName) * numLines)
-  }
-
-  protected def updateWeights(
-      boostWeightColName: String,
-      lossColName: String,
-      beta: Double,
-      updatedBoostWeightColName: String)(df: DataFrame): DataFrame = {
-    df.withColumn(
-      updatedBoostWeightColName,
-      col(boostWeightColName) * pow(lit(beta), lit(1) - col(lossColName)))
-  }
-
-  protected def avgLoss(lossColName: String, boostProbaColName: String)(df: DataFrame): Double = {
-    df.agg(sum(col(lossColName) * col(boostProbaColName)))
-      .first()
-      .getDouble(0)
-  }
-
-  protected def beta(avgl: Double, numClasses: Int = 2): Double = {
-    avgl / ((1 - avgl) * (numClasses - 1))
-  }
-
-  protected def weight(beta: Double): Double = {
-    if (beta == 0.0) {
-      1.0
-    } else {
-      math.log(1 / beta)
-    }
-  }
-
-  protected def extractBoostedBag(poissonProbaColName: String, seed: Long)(
-      df: DataFrame): DataFrame = {
-
-    val poissonProbaColIndex = df.schema.fieldIndex(poissonProbaColName)
-
-    val replicatedRDD = df.rdd.mapPartitionsWithIndex {
-      case (i, rows) =>
-        rows.zipWithIndex.flatMap {
-          case (row, j) =>
-            val prob = row.getDouble(poissonProbaColIndex)
-            if (prob == 0.0) {
-              Iterator.empty
-            } else {
-              val poisson = new PoissonDistribution(prob)
-              poisson.reseedRandomGenerator(seed + i + j)
-              Iterator.fill(poisson.sample())(row)
-            }
-        }
-    }
-
-    df.sparkSession.createDataFrame(replicatedRDD, df.schema)
-
-  }
-
-  protected def terminateVal(
-      withValidation: Boolean,
-      error: Double,
-      verror: Double,
-      tol: Double,
-      numRound: Int,
-      numTry: Int,
-      iter: Int,
-      instrumentation: Instrumentation): (Int, Double, Int) = {
-    if (withValidation) {
-
-      val improved = verror < error * (1 - tol)
-      if (improved) {
-        (iter - 1, verror, 0)
-      } else {
-        if (numTry == numRound - 1) {
-          instrumentation.logInfo(
-            s"Stopped because new boosters don't improved validation performance more than $tol in $numRound rounds.")
-          (0, 0.0, numTry + 1)
-        } else {
-          (iter - 1, error, numTry + 1)
-        }
-      }
-    } else {
-      (iter - 1, 0.0, 0)
-    }
-
-  }
-
-  protected def terminate(
-      avgl: Double,
-      withValidation: Boolean,
-      error: Double,
-      verror: Double,
-      tol: Double,
-      numRound: Int,
-      numTry: Int,
-      iter: Int,
-      instrumentation: Instrumentation,
-      numClasses: Double = 2.0): (Int, Double, Int) = {
-    if (avgl > ((numClasses - 1.0) / numClasses)) {
-      instrumentation.logInfo(
-        s"Stopped because the average loss of new booster is higher than ${(numClasses - 1.0) / numClasses}")
-      (0, 0.0, 1)
-    } else if (avgl == 0.0) {
-      instrumentation.logInfo(s"Stopped because the average loss was $avgl")
-      (0, 0.0, 0)
-    } else {
-      terminateVal(withValidation, error, verror, tol, numRound, numTry, iter, instrumentation)
-    }
-  }
+  setDefault(numBaseLearners -> 20)
+  setDefault(checkpointInterval -> 10)
 
 }

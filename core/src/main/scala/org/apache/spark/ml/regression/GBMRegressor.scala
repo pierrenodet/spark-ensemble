@@ -16,31 +16,41 @@
 
 package org.apache.spark.ml.regression
 
-import java.util.{Locale, UUID}
-
-import breeze.numerics._
+import breeze.linalg.{DenseVector => BDV}
+import breeze.optimize.CachedDiffFunction
+import breeze.optimize.{LBFGS => BreezeLBFGS}
+import breeze.optimize.{LBFGSB => BreezeLBFGSB}
+import breeze.optimize.{OWLQN => BreezeOWLQN}
 import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
+import org.apache.spark.ml.PredictionModel
+import org.apache.spark.ml.Predictor
+import org.apache.spark.ml.boosting.GBMInstance
 import org.apache.spark.ml.boosting.GBMParams
-import org.apache.spark.ml.ensemble.{
-  EnsemblePredictionModelType,
-  EnsemblePredictorType,
-  HasBaseLearner
-}
-import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
-import org.apache.spark.ml.param.shared.HasWeightCol
-import org.apache.spark.ml.param.{DoubleParam, Param, ParamMap, ParamPair}
+import org.apache.spark.ml.boosting._
+import org.apache.spark.ml.ensemble.EnsemblePredictionModelType
+import org.apache.spark.ml.ensemble.EnsembleRegressorType
+import org.apache.spark.ml.ensemble.HasBaseLearner
+import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.optim.loss.RDDLossFunction
+import org.apache.spark.ml.param.DoubleParam
+import org.apache.spark.ml.param.Param
+import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.ParamPair
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.ml.util._
-import org.apache.spark.ml.{PredictionModel, Predictor}
-import org.apache.spark.sql.functions.{col, not, udf}
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.util.PeriodicRDDCheckpointer
+import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.functions._
 import org.apache.spark.storage.StorageLevel
+import org.json4s.DefaultFormats
+import org.json4s.JObject
 import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods.{parse, render}
-import org.json4s.{DefaultFormats, JObject}
+import org.json4s.jackson.JsonMethods.parse
+import org.json4s.jackson.JsonMethods.render
 
-import scala.annotation.tailrec
+import java.util.Locale
 
 private[ml] trait GBMRegressorParams extends GBMParams {
 
@@ -88,31 +98,13 @@ private[ml] object GBMRegressorParams {
   final val supportedLossTypes: Array[String] =
     Array("squared", "absolute", "huber", "quantile").map(_.toLowerCase(Locale.ROOT))
 
-  def lossFunction(loss: String, alpha: Double): (Double, Double) => Double =
+  def loss(loss: String, alpha: Double): GBMScalarLoss =
     loss match {
-      case "squared" =>
-        (y, prediction) => pow(y - prediction, 2) / 2.0
-      case "absolute" =>
-        (y, prediction) => abs(y - prediction)
-      case "huber" =>
-        (y, prediction) => pow(alpha, 2) * (sqrt(1.0 + pow((y - prediction) / alpha, 2)) - 1.0)
-      case "quantile" =>
-        (y, prediction) =>
-          if (prediction > y) (alpha - 1.0) * (y - prediction) else alpha * (y - prediction)
-      case _ => throw new RuntimeException(s"Boosting was given bad loss type: $loss")
-    }
-
-  def gradFunction(loss: String, alpha: Double): (Double, Double) => Double =
-    loss match {
-      case "squared" =>
-        (y, prediction) => -(y - prediction)
-      case "absolute" =>
-        (y, prediction) => -signum(y - prediction)
-      case "huber" =>
-        (y, prediction) => -(y - prediction) / sqrt(1 + pow((y - prediction) / alpha, 2))
-      case "quantile" =>
-        (y, prediction) => if (prediction > y) -(alpha - 1.0) else -alpha
-      case _ => throw new RuntimeException(s"Boosting was given bad loss type: $loss")
+      case "squared" => SquaredLoss
+      case "absolute" => AbsoluteLoss
+      case "huber" => HuberLoss(alpha)
+      case "quantile" => QuantileLoss(alpha)
+      case _ => throw new RuntimeException(s"GBMRegressor was given bad loss type: $loss")
     }
 
   def saveImpl(
@@ -136,10 +128,10 @@ private[ml] object GBMRegressorParams {
   def loadImpl(
       path: String,
       sc: SparkContext,
-      expectedClassName: String): (DefaultParamsReader.Metadata, EnsemblePredictorType) = {
+      expectedClassName: String): (DefaultParamsReader.Metadata, EnsembleRegressorType) = {
 
     val metadata = DefaultParamsReader.loadMetadata(path, sc, expectedClassName)
-    val learner = HasBaseLearner.loadImpl(path, sc)
+    val learner = HasBaseLearner.loadImpl[EnsembleRegressorType](path, sc)
     (metadata, learner)
   }
 
@@ -153,8 +145,8 @@ class GBMRegressor(override val uid: String)
   /** @group setParam */
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
-  def setBaseLearner(value: Predictor[_, _, _]): this.type =
-    set(baseLearner, value.asInstanceOf[EnsemblePredictorType])
+  def setBaseLearner(value: EnsembleRegressorType): this.type =
+    set(baseLearner, value)
 
   /** @group setParam */
   def setNumBaseLearners(value: Int): this.type = set(numBaseLearners, value)
@@ -168,11 +160,8 @@ class GBMRegressor(override val uid: String)
   /** @group setParam */
   def setLearningRate(value: Double): this.type = set(learningRate, value)
 
-  /** @group setParam */
-  def setOptimizedWeights(value: Boolean): this.type = set(optimizedWeights, value)
-
-  /** @group setParam */
-  def setValidationIndicatorCol(value: String): this.type = set(validationIndicatorCol, value)
+  /** @group expertSetParam */
+  def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
 
   /** @group setParam */
   def setMaxIter(value: Int): this.type = set(maxIter, value)
@@ -180,10 +169,25 @@ class GBMRegressor(override val uid: String)
   /** @group setParam */
   def setTol(value: Double): this.type = set(tol, value)
 
+  /** @group expertSetParam */
+  def setOptimizedWeights(value: Boolean): this.type = set(optimizedWeights, value)
+
+  /** @group setParam */
+  def setValidationIndicatorCol(value: String): this.type = set(validationIndicatorCol, value)
+
+  /** @group setParam */
+  def setValidationTol(value: Double): this.type = set(validationTol, value)
+
+  /** @group setParam */
+  def setNumRounds(value: Int): this.type = set(numRounds, value)
+
+  /** @group setParam */
+  def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
+
   /** @group setParam */
   def setSeed(value: Long): this.type = set(seed, value)
 
-  def this() = this(Identifiable.randomUID("GBMRegressor"))
+  def this() = this(Identifiable.randomUID("GBMRegressor2"))
 
   override def copy(extra: ParamMap): GBMRegressor = {
     val copied = new GBMRegressor(uid)
@@ -213,245 +217,227 @@ class GBMRegressor(override val uid: String)
         tol,
         seed)
 
-      val weightColIsUsed = isDefined(weightCol) && $(weightCol).nonEmpty && {
-        getBaseLearner match {
-          case _: HasWeightCol => true
-          case c =>
-            instr.logWarning(s"weightCol is ignored, as it is not supported by $c now.")
-            false
-        }
-      }
+      val spark = dataset.sparkSession
+      val sc = spark.sparkContext
+      import spark.implicits._
 
       val withValidation = isDefined(validationIndicatorCol) && $(validationIndicatorCol).nonEmpty
 
-      val df = if (weightColIsUsed) {
-        dataset.select($(labelCol), $(weightCol), $(featuresCol))
-      } else {
-        dataset.select($(labelCol), $(featuresCol))
-      }
-
-      val (train, validation) = if (withValidation) {
+      val (trainDataset, validationDataset) = if (withValidation) {
         (
-          df.filter(not(col($(validationIndicatorCol)))),
-          df.filter(col($(validationIndicatorCol))))
+          extractInstances(dataset.filter(not(col($(validationIndicatorCol))))),
+          extractInstances(dataset.filter(col($(validationIndicatorCol)))))
       } else {
-        (df, df.sparkSession.emptyDataFrame)
+        (extractInstances(dataset), null)
       }
 
-      val handlePersistence =
-        dataset.storageLevel == StorageLevel.NONE && (train.storageLevel == StorageLevel.NONE) && (validation.storageLevel == StorageLevel.NONE)
-      if (handlePersistence) {
-        train.persist(StorageLevel.MEMORY_AND_DISK)
-        validation.persist(StorageLevel.MEMORY_AND_DISK)
-      }
+      trainDataset
+        .persist(StorageLevel.MEMORY_AND_DISK)
+      if (withValidation) validationDataset.persist(StorageLevel.MEMORY_AND_DISK)
 
-      val numFeatures = MetadataUtils.getNumFeatures(train, getFeaturesCol)
+      val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
 
-      @tailrec
-      def trainBoosters(
-          train: DataFrame,
-          validation: DataFrame,
-          labelColName: String,
-          weightColName: Option[String],
-          featuresColName: String,
-          predictionColName: String,
-          withValidation: Boolean,
-          baseLearner: EnsemblePredictorType,
-          numBaseLearners: Int,
-          learningRate: Double,
-          loss: (Double, Double) => Double,
-          grad: (Double, Double) => Double,
-          sampleFeatureRatio: Double,
-          numFeatures: Int,
-          optimizedWeights: Boolean,
-          maxIter: Int,
-          tol: Double,
-          numRound: Int,
-          seed: Long,
-          instrumentation: Instrumentation)(
-          weights: Array[Double],
-          subspaces: Array[Array[Int]],
-          boosters: Array[EnsemblePredictionModelType],
-          const: Double,
-          iter: Int,
-          error: Double,
-          numTry: Int): (Array[Double], Array[Array[Int]], Array[EnsemblePredictionModelType]) = {
+      val models = Array.ofDim[EnsemblePredictionModelType]($(numBaseLearners))
+      val weights = Array.ofDim[Double]($(numBaseLearners))
 
-        if (iter == 0) {
+      var predictions = trainDataset.map(_ => 0.0)
+      val predictionsCheckpointer = new PeriodicRDDCheckpointer[Double](
+        $(checkpointInterval),
+        sc,
+        StorageLevel.MEMORY_AND_DISK)
+      predictionsCheckpointer.update(predictions)
 
-          instrumentation.logInfo(s"Learning of GBM finished.")
-          (weights.dropRight(numTry), subspaces.dropRight(numTry), boosters.dropRight(numTry))
-
-        } else {
-
-          instrumentation.logNamedValue("iteration", numBaseLearners - iter)
-
-          val gradUDF = udf[Double, Double, Double](grad(_, _))
-
-          val currentPredictionColName = "gbm$current" + UUID.randomUUID().toString
-          val current = new GBMRegressionModel(weights, subspaces, boosters, const)
-            .setPredictionCol(currentPredictionColName)
-            .setFeaturesCol(featuresColName)
-
-          val residualsColName = "gbm$residuals" + UUID.randomUUID().toString
-          val residuals = current
-            .transform(train)
-            .withColumn(
-              residualsColName,
-              -gradUDF(col(labelColName), col(currentPredictionColName)))
-
-          val (subspace, subbagged) = subbag(
-            getFeaturesCol,
-            getReplacement,
-            getSubsampleRatio,
-            getSubspaceRatio,
-            numFeatures,
-            getSeed + iter)(residuals)
-
-          val booster = fitBaseLearner(
-            baseLearner,
-            residualsColName,
-            featuresColName,
-            predictionColName,
-            weightColName)(subbagged)
-
-          val weight = if (getOptimizedWeights) {
-
-            val boosterPredictionColName = "gbm$booster" + UUID.randomUUID().toString
-            val transformed =
-              booster.setPredictionCol(boosterPredictionColName).transform(subbagged)
-
-            learningRate * findOptimizedWeight(
-              labelColName,
-              currentPredictionColName,
-              boosterPredictionColName,
-              loss,
-              grad,
-              maxIter,
-              tol)(transformed)
-
-          } else {
-
-            learningRate * 1.0
-
+      val initGbmInstances =
+        trainDataset
+          .zip(predictions)
+          .map { case (instance, prediction) =>
+            GBMInstance(instance.label, instance.weight, 0, 1.0)
           }
+          .persist(StorageLevel.MEMORY_AND_DISK)
 
-          instrumentation.logNamedValue("weight", weight)
+      var quantile = $(loss) match {
+        case "huber" => dataset.stat.approxQuantile("label", Array($(alpha)), $(tol))(0)
+        case _ => $(alpha)
+      }
 
-          val updatedWeights = weights :+ weight
-          val updatedBoosters = boosters :+ booster
-          val updatedSubspaces = subspaces :+ subspace
+      val gbmLoss = GBMRegressorParams.loss($(loss), _)
+      val getAggregatorFunc = (_: GBMLoss) => new GBMAggregator(gbmLoss(quantile))(_)
 
-          val updatedModel =
-            new GBMRegressionModel(updatedWeights, updatedSubspaces, updatedBoosters, const)
+      val initCostFun =
+        new RDDLossFunction(initGbmInstances, getAggregatorFunc(gbmLoss(quantile)), None)
 
-          val verror =
-            evaluateOnValidation(updatedModel, labelColName, loss)(validation)
+      // val optimizer = $(loss) match {
+      //   case "squared" => new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
+      //   case "huber" =>
+      //     val lowerBounds = BDV[Double](Array.fill(1)(Double.MinValue))
+      //     val upperBounds = BDV[Double](Array.fill(1)(Double.MaxValue))
+      //     new BreezeLBFGSB(lowerBounds, upperBounds, $(maxIter), 10, $(tol))
+      //   case "absolute" | "quantile" =>
+      //     new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, 0, $(tol))
+      // }
+      // val optimizer = $(loss) match {
+      //   case "squared" => new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
+      //   case "huber" | "absolute" | "quantile" =>
+      //     val lowerBounds = BDV[Double](Array.fill(1)(Double.MinValue))
+      //     val upperBounds = BDV[Double](Array.fill(1)(Double.MaxValue))
+      //     new BreezeLBFGSB(lowerBounds, upperBounds, $(maxIter), 10, $(tol))
+      // }
 
-          val (updatedIter, updatedError, updatedNumTry) =
-            terminate(
-              weight,
-              learningRate,
-              withValidation,
-              error,
-              verror,
-              tol,
-              numRound,
-              numTry,
-              iter,
-              instrumentation)
+      val lowerBounds = BDV[Double](Array.fill(1)(Double.MinValue))
+      val upperBounds = BDV[Double](Array.fill(1)(Double.MaxValue))
+      val optimizer = new BreezeLBFGSB(lowerBounds, upperBounds, $(maxIter), 10, $(tol))
 
-          trainBoosters(
-            train,
-            validation,
-            labelColName,
-            weightColName,
-            featuresColName,
-            predictionColName,
-            withValidation,
-            baseLearner,
-            numBaseLearners,
-            learningRate,
-            loss,
-            grad,
-            sampleFeatureRatio,
-            numFeatures,
-            optimizedWeights,
-            maxIter,
-            tol,
-            numRound,
-            seed + iter,
-            instrumentation)(
-            updatedWeights,
-            updatedSubspaces,
-            updatedBoosters,
-            const,
-            updatedIter,
-            updatedError,
-            updatedNumTry)
+      val init = BDV[Double](1)
 
+      val const = $(optimizedWeights) match {
+        case true => optimizer.minimize(new CachedDiffFunction(initCostFun), init)(0)
+        case false =>
+          $(loss) match {
+            case "squared" => trainDataset.map(_.label).mean()
+            case "huber" | "absolute" | "quantile" =>
+              val labels = trainDataset.map(_.label)
+              val labelsDF = spark.createDataset(labels).toDF("label")
+              val constQuantile = ($(loss)) match {
+                case "huber" | "absolute" => 0.5
+                case "quantile" => $(alpha)
+              }
+              labelsDF.stat.approxQuantile("label", Array(constQuantile), $(tol))(0)
+          }
+      }
+      // val const = $(loss) match {
+      //   case "squared" => trainDataset.map(_.label).mean()
+      //   case "huber" | "absolute" | "quantile" =>
+      //     val labels = trainDataset.map(_.label)
+      //     val labelsDF = spark.createDataset(labels).toDF("label")
+      //     val constQuantile = ($(loss)) match {
+      //       case "huber" | "absolute" => 0.5
+      //       case "quantile" => $(alpha)
+      //     }
+      //     labelsDF.stat.approxQuantile("label", Array(constQuantile), $(tol))(0)
+      // }
+
+      initGbmInstances.unpersist()
+
+      predictions = predictions.map(_ => const)
+      predictionsCheckpointer.update(predictions)
+
+      var validationPredictions: RDD[Double] = null
+      var validatePredictionsCheckpointer: PeriodicRDDCheckpointer[Double] = null
+      var bestValidationError: Double = 0.0
+      if (withValidation) {
+        validationPredictions = validationDataset.map(_ => const)
+        validatePredictionsCheckpointer = new PeriodicRDDCheckpointer[Double](
+          $(checkpointInterval),
+          sc,
+          StorageLevel.MEMORY_AND_DISK)
+        validatePredictionsCheckpointer.update(validationPredictions)
+        bestValidationError = validationDataset
+          .zip(validationPredictions)
+          .map { case (instance, prediction) =>
+            gbmLoss(quantile).loss(instance.label, prediction)
+          }
+          .mean()
+      }
+
+      var i = 0
+      var v = 0
+      while (i < $(numBaseLearners) && v < $(numRounds)) {
+
+        $(loss) match {
+          case "huber" =>
+            val residuals = trainDataset.zip(predictions).map { case (instance, prediction) =>
+              math.abs(instance.label - prediction)
+            }
+            quantile = spark
+              .createDataset(residuals)
+              .toDF("residual")
+              .stat
+              .approxQuantile("residual", Array($(alpha)), $(tol))(0)
+          case _ => ()
         }
 
+        val negativeGradients = trainDataset.zip(predictions).map { case (instance, prediction) =>
+          instance.copy(label = gbmLoss(quantile).negativeGradient(instance.label, prediction))
+        }
+
+        val model =
+          fitBaseLearner($(baseLearner), "label", "features", $(predictionCol), Some("weight"))(
+            spark.createDataFrame(negativeGradients))
+
+        val gbmInstances = trainDataset
+          .zip(predictions)
+          .map { case (instance, prediction) =>
+            GBMInstance(
+              instance.label,
+              instance.weight,
+              prediction,
+              model.predict(instance.features))
+          }
+          .persist(StorageLevel.MEMORY_AND_DISK)
+
+        val init = BDV[Double](1)
+        val costFun =
+          new RDDLossFunction(gbmInstances, getAggregatorFunc(gbmLoss(quantile)), None)
+
+        val solution = $(optimizedWeights) match {
+          case true => optimizer.minimize(new CachedDiffFunction(costFun), init)(0)
+          case false => 1.0
+        }
+
+        val weight = $(learningRate) * solution
+
+        models(i) = model
+        weights(i) = weight
+
+        predictions = trainDataset
+          .zip(predictions)
+          .map { case (instance, prediction) =>
+            prediction + weight * model.predict(instance.features)
+          }
+        predictionsCheckpointer.update(predictions)
+
+        gbmInstances.unpersist()
+
+        if (withValidation) {
+          validationPredictions = validationDataset
+            .zip(validationPredictions)
+            .map { case (instance, prediction) =>
+              prediction + weight * model.predict(instance.features)
+            }
+          validatePredictionsCheckpointer.update(validationPredictions)
+          val validationError = validationDataset
+            .zip(validationPredictions)
+            .map { case (instance, prediction) =>
+              gbmLoss(quantile).loss(instance.label, prediction)
+            }
+            .mean()
+          if (bestValidationError - validationError < $(validationTol) * math.max(
+              validationError,
+              0.01)) {
+            v += 1
+          } else if (validationError < bestValidationError) {
+            bestValidationError = validationError
+            v = 0
+          }
+        }
+
+        i += 1
+
       }
 
-      val optWeightColName = if (weightColIsUsed) {
-        Some($(weightCol))
-      } else {
-        None
-      }
+      trainDataset.unpersist()
+      if (withValidation) validationDataset.unpersist()
 
-      val const = if (getOptimizedWeights) {
-        findOptimizedConst(
-          getLabelCol,
-          GBMRegressorParams.lossFunction(getLoss, getAlpha),
-          GBMRegressorParams.gradFunction(getLoss, getAlpha),
-          getMaxIter,
-          getTol)(train)
-      } else {
-        0.0
-      }
-
-      val (weights, subspaces, boosters) =
-        trainBoosters(
-          train,
-          validation,
-          getLabelCol,
-          optWeightColName,
-          getFeaturesCol,
-          getPredictionCol,
-          withValidation,
-          getBaseLearner,
-          getNumBaseLearners,
-          getLearningRate,
-          GBMRegressorParams.lossFunction(getLoss, getAlpha),
-          GBMRegressorParams.gradFunction(getLoss, getAlpha),
-          getSubspaceRatio,
-          numFeatures,
-          getOptimizedWeights,
-          getMaxIter,
-          getTol,
-          getNumRound,
-          getSeed,
-          instr)(
-          Array.empty,
-          Array.empty,
-          Array.empty,
-          const,
-          getNumBaseLearners,
-          Double.MaxValue,
-          0)
-
-      if (handlePersistence) {
-        train.unpersist()
-        validation.unpersist()
-      }
-
-      new GBMRegressionModel(weights, subspaces, boosters, const)
+      new GBMRegressionModel(
+        weights.take(i - v),
+        Array.fill($(numBaseLearners))(Array.range(0, numFeatures)),
+        models.take(i - v),
+        const)
 
     }
 
   override def write: MLWriter =
-    new GBMRegressor.GBMRegressorWriter(this)
+    new GBMRegressor.GBMRegressor2Writer(this)
 
 }
 
@@ -461,7 +447,7 @@ object GBMRegressor extends MLReadable[GBMRegressor] {
 
   override def load(path: String): GBMRegressor = super.load(path)
 
-  private[GBMRegressor] class GBMRegressorWriter(instance: GBMRegressor) extends MLWriter {
+  private[GBMRegressor] class GBMRegressor2Writer(instance: GBMRegressor) extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
       GBMRegressorParams.saveImpl(instance, path, sc)
@@ -504,11 +490,14 @@ class GBMRegressionModel(
   val numBaseModels: Int = models.length
 
   override def predict(features: Vector): Double = {
-    BLAS.dot(
-      Vectors.dense(models.zip(subspaces).map { case (model, subspace) =>
-        model.predict(slicer(subspace)(features))
-      }),
-      Vectors.dense(weights)) + const
+    var sum = 0.0
+    var i = 0
+    while (i < numBaseModels) {
+      sum += models(i).predict(slicer(subspaces(i))(features)) * weights(i)
+      i += 1
+    }
+    sum += const
+    sum
   }
 
   override def copy(extra: ParamMap): GBMRegressionModel = {

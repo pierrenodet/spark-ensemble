@@ -14,14 +14,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.stacking
-import org.apache.spark.ml.PredictorParams
-import org.apache.spark.ml.ensemble.{HasBaseLearners, HasStacker, EnsemblePredictorType}
-import org.apache.spark.ml.param.shared.{HasParallelism, HasWeightCol}
+package org.apache.spark.ml.ensemble
 
-private[ml] trait StackingParams
-    extends PredictorParams
-    with HasParallelism
-    with HasWeightCol
-    with HasStacker
-    with HasBaseLearners[EnsemblePredictorType] {}
+import scala.reflect.ClassTag
+
+object Utils {
+
+  def weightedMedian[
+      @specialized(Double) T: ClassTag: Ordering,
+      @specialized(Double) W: ClassTag: Numeric](data: Array[T], weights: Array[W]) = {
+    import Numeric.Implicits._
+
+    val (sortedData, sortedWeights) = data.zip(weights).sortBy(_._1).unzip
+    val cusumWeights = sortedWeights
+      .scanLeft(0.0)(_ + _.toDouble)
+      .tail
+    val sumWeights = cusumWeights.last
+    val median = cusumWeights
+      .map(_ >= 0.5 * sumWeights)
+      .indexOf(true)
+    sortedData(median)
+  }
+
+}

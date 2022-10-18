@@ -16,13 +16,7 @@
 
 package org.apache.spark.ml.classification
 import org.apache.spark._
-import org.apache.spark.ml.Model
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
-import org.apache.spark.ml.regression.DecisionTreeRegressor
-import org.apache.spark.ml.tuning.CrossValidator
-import org.apache.spark.ml.tuning.ParamGridBuilder
-import org.apache.spark.ml.tuning.TrainValidationSplit
-import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.scalatest.BeforeAndAfterAll

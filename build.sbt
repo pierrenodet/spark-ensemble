@@ -1,8 +1,8 @@
-lazy val sparkVersion = "3.2.2"
+lazy val sparkVersion = "3.3.0"
 lazy val scalaCheckVersion = "1.16.0"
 lazy val scalaTestVersion = "3.2.13"
 lazy val scala212Version = "2.12.15"
-lazy val scala213Version = "2.13.8"
+lazy val scala213Version = "2.13.10"
 
 Global / onChangedBuildSource := ReloadOnSourceChanges
 
@@ -43,6 +43,7 @@ ThisBuild / resolvers ++= Resolver.sonatypeOssRepos("snapshots")
 ThisBuild / versionScheme := Some("semver-spec")
 
 lazy val commonSettings = Seq(
+  scalacOptions += "-Wunused:imports",
   Compile / doc / scalacOptions --= Seq("-Xfatal-warnings"),
   Compile / doc / scalacOptions ++= Seq(
     "-groups",

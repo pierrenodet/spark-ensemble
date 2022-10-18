@@ -18,20 +18,14 @@ package org.apache.spark.ml.ensemble
 
 import org.apache.spark._
 import org.apache.spark.ml.ensemble.HasSubBag
-import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.Params
-import org.apache.spark.ml.tuning.CrossValidator
-import org.apache.spark.ml.tuning.ParamGridBuilder
 import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.sql._
 import org.scalacheck.Arbitrary
 import org.scalacheck.Gen
-import org.scalacheck.Shrink
 import org.scalatest.BeforeAndAfterAll
-import org.scalatest.PrivateMethodTester
 import org.scalatest.funsuite.AnyFunSuite
-import org.scalatest.matchers.should.Matchers._
 import org.scalatest.matchers.should.Matchers._
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
@@ -84,7 +78,7 @@ class HasSubBagSuite extends AnyFunSuite with BeforeAndAfterAll with ScalaCheckP
     val numFeatures = MetadataUtils.getNumFeatures(data, featuresCol)
 
     forAll(Gen.long) { seed =>
-      val (_, subbagged) = FakeSubBag.subbag(featuresCol, false, 1, 1, numFeatures, 1L)(data)
+      val (_, subbagged) = FakeSubBag.subbag(featuresCol, false, 1, 1, numFeatures, seed)(data)
 
       assert(data.collect() === subbagged.collect())
     }
