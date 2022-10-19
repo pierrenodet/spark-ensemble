@@ -24,6 +24,7 @@ import org.apache.spark.ml.param.IntParam
 import org.apache.spark.ml.param.Param
 import org.apache.spark.ml.param.ParamValidators
 import org.apache.spark.ml.param.shared._
+import java.util.Locale
 
 private[ml] trait GBMParams
     extends PredictorParams
@@ -47,6 +48,25 @@ private[ml] trait GBMParams
 
   /** @group getParam */
   def getOptimizedWeights: Boolean = $(optimizedWeights)
+
+  /**
+   * Newton (using hessian) or Gradient updates. (case-insensitive) Supported: "gradient",
+   * "newton". (default = gradient)
+   *
+   * @group param
+   */
+  val updates: Param[String] =
+    new Param(
+      this,
+      "updates",
+      "updates, (case-insensitive). Supported options:" + s"${GBMParams.supportedUpdates
+          .mkString(",")}",
+      ParamValidators.inArray(GBMParams.supportedUpdates))
+
+  /** @group getParam */
+  def getUpdates: String = $(updates).toLowerCase(Locale.ROOT)
+
+  setDefault(updates -> "gradient")
 
   /**
    * param for the learning rate of the algorithm
@@ -104,9 +124,14 @@ private[ml] trait GBMParams
   setDefault(optimizedWeights -> true)
   setDefault(learningRate -> 0.1)
   setDefault(numBaseLearners -> 10)
-  setDefault(tol -> 1e-4)
+  setDefault(tol -> 1e-6)
   setDefault(maxIter -> 100)
   setDefault(numRounds -> 1)
   setDefault(validationTol -> 0.01)
 
+}
+
+private[ml] object GBMParams {
+  final val supportedUpdates: Array[String] =
+    Array("newton", "gradient").map(_.toLowerCase(Locale.ROOT))
 }

@@ -96,14 +96,16 @@ private[ml] trait GBMRegressorParams extends GBMParams {
 private[ml] object GBMRegressorParams {
 
   final val supportedLossTypes: Array[String] =
-    Array("squared", "absolute", "huber", "quantile").map(_.toLowerCase(Locale.ROOT))
+    Array("squared", "absolute", "huber", "quantile", "logcosh").map(_.toLowerCase(Locale.ROOT))
 
   def loss(loss: String, alpha: Double): GBMScalarLoss =
     loss match {
       case "squared" => SquaredLoss
       case "absolute" => AbsoluteLoss
       case "huber" => HuberLoss(alpha)
-      case "quantile" => QuantileLoss(alpha)
+      // case "quantile" => QuantileLoss(alpha)
+      case "logcosh" => LogCoshLoss
+      // case "quantile" => ScaledLogCoshLoss(alpha)
       case _ => throw new RuntimeException(s"GBMRegressor was given bad loss type: $loss")
     }
 
@@ -171,6 +173,9 @@ class GBMRegressor(override val uid: String)
 
   /** @group expertSetParam */
   def setOptimizedWeights(value: Boolean): this.type = set(optimizedWeights, value)
+
+  /** @group expertSetParam */
+  def setUpdates(value: String): this.type = set(updates, value)
 
   /** @group setParam */
   def setValidationIndicatorCol(value: String): this.type = set(validationIndicatorCol, value)
@@ -266,55 +271,30 @@ class GBMRegressor(override val uid: String)
       val initCostFun =
         new RDDLossFunction(initGbmInstances, getAggregatorFunc(gbmLoss(quantile)), None)
 
-      // val optimizer = $(loss) match {
-      //   case "squared" => new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
-      //   case "huber" =>
-      //     val lowerBounds = BDV[Double](Array.fill(1)(Double.MinValue))
-      //     val upperBounds = BDV[Double](Array.fill(1)(Double.MaxValue))
-      //     new BreezeLBFGSB(lowerBounds, upperBounds, $(maxIter), 10, $(tol))
-      //   case "absolute" | "quantile" =>
-      //     new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, 0, $(tol))
-      // }
-      // val optimizer = $(loss) match {
-      //   case "squared" => new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
-      //   case "huber" | "absolute" | "quantile" =>
-      //     val lowerBounds = BDV[Double](Array.fill(1)(Double.MinValue))
-      //     val upperBounds = BDV[Double](Array.fill(1)(Double.MaxValue))
-      //     new BreezeLBFGSB(lowerBounds, upperBounds, $(maxIter), 10, $(tol))
-      // }
+      val constOptimizer = new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
 
-      val lowerBounds = BDV[Double](Array.fill(1)(Double.MinValue))
-      val upperBounds = BDV[Double](Array.fill(1)(Double.MaxValue))
-      val optimizer = new BreezeLBFGSB(lowerBounds, upperBounds, $(maxIter), 10, $(tol))
+      // val lowerBounds = BDV[Double](Array.fill(1)(Double.MinValue))
+      // val upperBounds = BDV[Double](Array.fill(1)(Double.MaxValue))
+      // val optimizer = new BreezeLBFGSB(lowerBounds, upperBounds, $(maxIter), 10, $(tol))
 
-      val init = BDV[Double](1)
+      val labels = trainDataset.map(_.label)
+      val initConst = $(loss) match {
+        case "squared" => labels.mean()
+        case "huber" | "absolute" | "quantile" | "logcosh" =>
+          val labelsDF = spark.createDataset(labels).toDF("label")
+          val constQuantile = ($(loss)) match {
+            case "huber" | "absolute" | "logcosh" => 0.5
+            case "quantile" => $(alpha)
+          }
+          labelsDF.stat.approxQuantile("label", Array(constQuantile), $(tol))(0)
+      }
 
       val const = $(optimizedWeights) match {
-        case true => optimizer.minimize(new CachedDiffFunction(initCostFun), init)(0)
-        case false =>
-          $(loss) match {
-            case "squared" => trainDataset.map(_.label).mean()
-            case "huber" | "absolute" | "quantile" =>
-              val labels = trainDataset.map(_.label)
-              val labelsDF = spark.createDataset(labels).toDF("label")
-              val constQuantile = ($(loss)) match {
-                case "huber" | "absolute" => 0.5
-                case "quantile" => $(alpha)
-              }
-              labelsDF.stat.approxQuantile("label", Array(constQuantile), $(tol))(0)
-          }
+        case true =>
+          constOptimizer.minimize(new CachedDiffFunction(initCostFun), BDV[Double](initConst))(0)
+        case false => initConst
+
       }
-      // val const = $(loss) match {
-      //   case "squared" => trainDataset.map(_.label).mean()
-      //   case "huber" | "absolute" | "quantile" =>
-      //     val labels = trainDataset.map(_.label)
-      //     val labelsDF = spark.createDataset(labels).toDF("label")
-      //     val constQuantile = ($(loss)) match {
-      //       case "huber" | "absolute" => 0.5
-      //       case "quantile" => $(alpha)
-      //     }
-      //     labelsDF.stat.approxQuantile("label", Array(constQuantile), $(tol))(0)
-      // }
 
       initGbmInstances.unpersist()
 
@@ -339,6 +319,18 @@ class GBMRegressor(override val uid: String)
           .mean()
       }
 
+      // val optimizer = $(loss) match {
+      //   case "squared" | "huber" =>
+      //     val lowerBounds = BDV[Double](Array.fill(1)(0.0))
+      //     val upperBounds = BDV[Double](Array.fill(1)(Double.MaxValue))
+      //     new BreezeLBFGSB(lowerBounds, upperBounds, $(maxIter), 10, $(tol))
+      //   case "absolute" | "quantile" =>
+      //     new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, 0, $(tol))
+      // }
+      val lowerBounds = BDV[Double](Array.fill(1)(0.0))
+      val upperBounds = BDV[Double](Array.fill(1)(Double.MaxValue))
+      val optimizer = new BreezeLBFGSB(lowerBounds, upperBounds, $(maxIter), 10, $(tol))
+
       var i = 0
       var v = 0
       while (i < $(numBaseLearners) && v < $(numRounds)) {
@@ -356,13 +348,30 @@ class GBMRegressor(override val uid: String)
           case _ => ()
         }
 
-        val negativeGradients = trainDataset.zip(predictions).map { case (instance, prediction) =>
-          instance.copy(label = gbmLoss(quantile).negativeGradient(instance.label, prediction))
+        val instances = $(updates) match {
+          case "gradient" =>
+            trainDataset.zip(predictions).map { case (instance, prediction) =>
+              instance.copy(label =
+                gbmLoss(quantile).negativeGradient(instance.label, prediction))
+            }
+          case "newton" =>
+            val hessians = trainDataset.zip(predictions).map { case (instance, prediction) =>
+              math.max(gbmLoss(quantile).hessian(instance.label, prediction), $(tol))
+            }
+            val sumHessians = hessians.treeReduce(_ + _, $(aggregationDepth))
+            trainDataset.zip(predictions).zip(hessians).map {
+              case ((instance, prediction), hessian) =>
+                val negGrad = gbmLoss(quantile).negativeGradient(instance.label, prediction)
+                (instance
+                  .copy(
+                    label = negGrad / hessian,
+                    weight = 1.0 / 2.0 * hessian / sumHessians * instance.weight))
+            }
         }
 
         val model =
           fitBaseLearner($(baseLearner), "label", "features", $(predictionCol), Some("weight"))(
-            spark.createDataFrame(negativeGradients))
+            spark.createDataFrame(instances))
 
         val gbmInstances = trainDataset
           .zip(predictions)
@@ -490,13 +499,12 @@ class GBMRegressionModel(
   val numBaseModels: Int = models.length
 
   override def predict(features: Vector): Double = {
-    var sum = 0.0
+    var sum = const
     var i = 0
     while (i < numBaseModels) {
       sum += models(i).predict(slicer(subspaces(i))(features)) * weights(i)
       i += 1
     }
-    sum += const
     sum
   }
 
