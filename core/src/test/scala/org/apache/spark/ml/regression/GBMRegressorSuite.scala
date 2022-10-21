@@ -59,22 +59,22 @@ class GBMRegressorSuite extends AnyFunSuite with BeforeAndAfterAll with ScalaChe
     val data = Seq.fill(20)(raw).reduce(_ union _).repartition(50).checkpoint()
     data.count()
 
-    val n = 30
+    val n = 100
+    val lr = 0.1
     val dtr = new DecisionTreeRegressor()
     val gbmr = new GBMRegressor()
       .setBaseLearner(dtr)
       .setNumBaseLearners(n)
-      .setLearningRate(1.0)
-      .setUpdates("newton")
-      .setLoss("logcosh")
+      .setLearningRate(lr)
+      .setLoss("absolute")
+      .setMaxIter(10)
+      .setTol(1e-2)
     val gbmrNoOptim = new GBMRegressor()
       .setBaseLearner(dtr)
       .setNumBaseLearners(n)
-      .setLearningRate(1.0)
-      // .setOptimizedWeights(false)
-      .setUpdates("gradient")
-      .setLoss("logcosh")
-    val gbtr = new GBTRegressor().setMaxIter(n).setLossType("absolute")
+      .setLearningRate(lr)
+      .setLoss("absolute")
+    val gbtr = new GBTRegressor().setMaxIter(n).setStepSize(lr).setLossType("absolute")
 
     val re = new RegressionEvaluator().setMetricName("mae")
 
@@ -96,11 +96,11 @@ class GBMRegressorSuite extends AnyFunSuite with BeforeAndAfterAll with ScalaChe
             gbmrModel.weights.take(i),
             gbmrModel.subspaces.take(i),
             gbmrModel.models.take(i),
-            gbmrModel.const)
+            gbmrModel.init)
         gbmrMetrics += re.evaluate(model.transform(test))
       })
     println(gbmrMetrics)
-    println(gbmrModel.const, gbmrModel.weights.mkString(","))
+    println(gbmrModel.init, gbmrModel.weights.mkString(","))
     Array
       .range(0, gbmrNoOptimModel.numBaseModels + 1)
       .foreach(i => {
@@ -109,12 +109,12 @@ class GBMRegressorSuite extends AnyFunSuite with BeforeAndAfterAll with ScalaChe
             gbmrNoOptimModel.weights.take(i),
             gbmrNoOptimModel.subspaces.take(i),
             gbmrNoOptimModel.models.take(i),
-            gbmrNoOptimModel.const)
+            gbmrNoOptimModel.init)
         gbmrNoOptimMetrics += re.evaluate(modelNoOptim.transform(test))
       })
 
     println(gbmrNoOptimMetrics)
-    println(gbmrNoOptimModel.const, gbmrNoOptimModel.weights.mkString(","))
+    println(gbmrNoOptimModel.init, gbmrNoOptimModel.weights.mkString(","))
 
     val gbtrModel = spark.time(gbtr.fit(train))
 
@@ -129,6 +129,7 @@ class GBMRegressorSuite extends AnyFunSuite with BeforeAndAfterAll with ScalaChe
         gbtrMetrics += re.evaluate(model.transform(test))
       })
     println(gbtrMetrics)
+    println(gbtrModel.treeWeights.mkString(","))
 
     assert(re.evaluate(dtrModel.transform(test)) > re.evaluate(gbmrModel.transform(test)))
     assert(re.evaluate(gbtrModel.transform(test)) > re.evaluate(gbmrModel.transform(test)))
@@ -147,7 +148,7 @@ class GBMRegressorSuite extends AnyFunSuite with BeforeAndAfterAll with ScalaChe
     val gbmr = new GBMRegressor()
       .setBaseLearner(dtr)
       .setNumBaseLearners(10)
-      .setLearningRate(0.4)
+      .setLearningRate(1.0)
     val gbtr = new GBTRegressor().setMaxIter(10)
 
     val re = new RegressionEvaluator().setMetricName("rmse")
@@ -199,7 +200,7 @@ class GBMRegressorSuite extends AnyFunSuite with BeforeAndAfterAll with ScalaChe
             gbmrNoValModel.weights.take(i),
             gbmrNoValModel.subspaces.take(i),
             gbmrNoValModel.models.take(i),
-            gbmrNoValModel.const)
+            gbmrNoValModel.init)
         metrics += re.evaluate(model.transform(data.filter(col("validation") === true)))
       })
 
@@ -240,7 +241,7 @@ class GBMRegressorSuite extends AnyFunSuite with BeforeAndAfterAll with ScalaChe
             gbmrModel.weights.take(i),
             gbmrModel.subspaces.take(i),
             gbmrModel.models.take(i),
-            gbmrModel.const)
+            gbmrModel.init)
         metrics += re.evaluate(model.transform(test))
       })
 
@@ -249,50 +250,6 @@ class GBMRegressorSuite extends AnyFunSuite with BeforeAndAfterAll with ScalaChe
         .sliding(2)
         .collect { case (h :: t) => h >= t.head }
         .count(identity) / (metrics.size - 1.0) == 1.0)
-
-  }
-
-  test("const is equal to right statistics") {
-
-    val gen = for {
-      loss <- Gen.oneOf(Seq("absolute"))
-      alpha <- Gen.chooseNum(0.05, 0.95)
-    } yield (loss, alpha)
-
-    forAll(gen) { case (loss, alpha) =>
-      val data =
-        spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm").cache()
-      data.count()
-
-      val dtr = new LinearRegression()
-      val gbmr = new GBMRegressor()
-        .setBaseLearner(dtr)
-        .setNumBaseLearners(1)
-        .setLoss(loss)
-        .setAlpha(alpha)
-
-      val gbmrModel = spark.time(gbmr.fit(data))
-      val (ref, precision) = loss match {
-        case "squared" => (data.select(mean("label")).first().getDouble(0), 1e-4)
-        case "absolute" => (data.stat.approxQuantile("label", Array(0.5), 0.0)(0), 1e-4)
-        case "quantile" => (data.stat.approxQuantile("label", Array(alpha), 0.0)(0), 1e-4)
-        case "huber" => {
-          val trim = if (alpha >= 0.5) alpha else 1 - alpha
-          val q1 = data.stat.approxQuantile("label", Array(trim), 0.0)(0)
-          val q2 = data.stat.approxQuantile("label", Array(1 - trim), 0.0)(0)
-          (
-            data
-              .filter(col("label") <= q1 && col("label") >= q2)
-              .select(mean("label"))
-              .first()
-              .getDouble(0),
-            6.0)
-        }
-
-      }
-
-      assert(gbmrModel.const === ref +- precision)
-    }
 
   }
 

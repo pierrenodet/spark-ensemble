@@ -16,22 +16,15 @@
 
 package org.apache.spark.ml.boosting
 
+import breeze.optimize.DiffFunction
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.BLAS
 import org.apache.spark.ml.linalg.DenseVector
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.optim.aggregator.DifferentiableLossAggregator
+import org.apache.spark.rdd.RDD
 
-/**
- * Class that represents an instance of weighted data point with label and features.
- *
- * @param label
- *   Label for this data point.
- * @param weight
- *   Weight for this data point.
- * @param prediction
- *   Prediction for this data point.
- */
 private[spark] case class GBMInstance(
     label: Array[Double],
     weight: Double,
@@ -82,6 +75,67 @@ class GBMAggregator(loss: GBMLoss, override val dim: Int = 1)(bcCoefficients: Br
 
 }
 
+object GBMLineSearch {
+
+  def functionFromSearchDirection(
+      f: DiffFunction[RDD[Double]],
+      x: RDD[Double],
+      direction: RDD[Double]): DiffFunction[Double] =
+    new DiffFunction[Double] {
+
+      override def valueAt(alpha: Double): Double = {
+        val newX = x.zip(direction).map { case (x, d) => x + alpha * d }
+        f.valueAt(newX)
+      }
+
+      override def gradientAt(alpha: Double): Double = {
+        val newX = x.zip(direction).map { case (x, d) => x + alpha * d }
+        f.gradientAt(newX).zip(direction).map { case (g, d) => g * d }.mean
+      }
+
+      def calculate(alpha: Double): (Double, Double) = {
+        val newX = x.zip(direction).map { case (x, d) => x + alpha * d }
+        val (ff, grad) = f.calculate(newX)
+        (ff, grad.zip(direction).map { case (g, d) => g * d }.mean)
+      }
+    }
+}
+
+class GBMDiffFunction(gbmLoss: GBMScalarLoss, instances: RDD[Instance], aggregationDepth: Int = 2)
+    extends DiffFunction[RDD[Double]]
+    with Serializable {
+
+  override def valueAt(x: RDD[Double]): Double = {
+    val (sumLosses, sumWeights) = instances
+      .zip(x)
+      .treeAggregate((0.0, 0.0))(
+        { case ((l, sw), (instance, x)) =>
+          (l + gbmLoss.loss(instance.label, x), sw + instance.weight)
+        },
+        { case ((l1, s1), (l2, s2)) => (l1 + l2, s1 + s2) },
+        aggregationDepth)
+    sumLosses / sumWeights
+  }
+
+  override def gradientAt(x: RDD[Double]): RDD[Double] = {
+    instances.zip(x).map { case (instance, x) => gbmLoss.gradient(instance.label, x) }
+  }
+
+  override def calculate(x: RDD[Double]): (Double, RDD[Double]) = {
+    val lossGradWeight = instances.zip(x).map { case (instance, x) =>
+      (gbmLoss.loss(instance.label, x), gbmLoss.gradient(instance.label, x), instance.weight)
+    }
+    val (sumLosses, sumWeights) = lossGradWeight.treeAggregate((0.0, 0.0))(
+      { case ((sl, sw), (l, g, w)) =>
+        (sl + l, sw + w)
+      },
+      { case ((l1, s1), (l2, s2)) => (l1 + l2, s1 + s2) },
+      aggregationDepth)
+    (sumLosses / sumWeights, lossGradWeight.map(_._2))
+  }
+
+}
+
 trait GBMLoss extends Serializable {
 
   def loss(label: Array[Double], prediction: Array[Double]): Double
@@ -94,8 +148,17 @@ trait GBMLoss extends Serializable {
     grad
   }
 
-  def hessian(label: Array[Double], prediction: Array[Double]): Array[Double]
+}
 
+trait HasHessian {
+  def hessian(label: Array[Double], prediction: Array[Double]): Array[Double]
+}
+
+trait HasScalarHessian {
+  def hessian(label: Double, prediction: Double): Double
+
+  def hessian(label: Array[Double], prediction: Array[Double]): Array[Double] =
+    Array(hessian(label(0), prediction(0)))
 }
 
 trait GBMScalarLoss extends GBMLoss {
@@ -114,13 +177,9 @@ trait GBMScalarLoss extends GBMLoss {
     -gradient(label, prediction)
   }
 
-  def hessian(label: Double, prediction: Double): Double
-
-  def hessian(label: Array[Double], prediction: Array[Double]): Array[Double] =
-    Array(hessian(label(0), prediction(0)))
 }
 
-case object SquaredLoss extends GBMScalarLoss {
+case object SquaredLoss extends GBMScalarLoss with HasScalarHessian {
   def loss(label: Double, prediction: Double): Double =
     math.pow(label - prediction, 2) / 2.0
 
@@ -134,11 +193,9 @@ case object AbsoluteLoss extends GBMScalarLoss {
   def loss(label: Double, prediction: Double): Double = math.abs(label - prediction)
 
   def gradient(label: Double, prediction: Double): Double = -math.signum(label - prediction)
-
-  def hessian(label: Double, prediction: Double): Double = 1.0
 }
 
-case object LogCoshLoss extends GBMScalarLoss {
+case object LogCoshLoss extends GBMScalarLoss with HasScalarHessian {
   def loss(label: Double, prediction: Double): Double = math.log(math.cosh(label - prediction))
 
   def gradient(label: Double, prediction: Double): Double = -math.tanh(label - prediction)
@@ -147,7 +204,7 @@ case object LogCoshLoss extends GBMScalarLoss {
     1.0 / math.pow(math.cosh(label - prediction), 2)
 }
 
-case class ScaledLogCoshLoss(alpha: Double) extends GBMScalarLoss {
+case class ScaledLogCoshLoss(alpha: Double) extends GBMScalarLoss with HasScalarHessian {
   def loss(label: Double, prediction: Double): Double =
     if (label > prediction) alpha * LogCoshLoss.loss(label, prediction)
     else (1 - alpha) * LogCoshLoss.loss(label, prediction)
@@ -161,7 +218,7 @@ case class ScaledLogCoshLoss(alpha: Double) extends GBMScalarLoss {
     else (1 - alpha) * LogCoshLoss.hessian(label, prediction)
 }
 
-case class HuberLoss(delta: Double) extends GBMScalarLoss {
+case class HuberLoss(delta: Double) extends GBMScalarLoss with HasScalarHessian {
   def loss(label: Double, prediction: Double): Double =
     if (math.abs(label - prediction) <= delta) math.pow(label - prediction, 2) / 2.0
     else delta * (math.abs(label - prediction) - delta / 2.0)
@@ -185,13 +242,9 @@ case class QuantileLoss(quantile: Double) extends GBMScalarLoss {
   def gradient(label: Double, prediction: Double): Double =
     if (label > prediction) -quantile else (1.0 - quantile)
 
-  def hessian(label: Double, prediction: Double): Double =
-    if (label > prediction) -1.0
-    else (1.0 - quantile)
-
 }
 
-case class LogLoss(numClasses: Int) extends GBMLoss {
+case class LogLoss(numClasses: Int) extends GBMLoss with HasHessian {
 
   override def loss(label: Array[Double], prediction: Array[Double]): Double = {
     var i = 0
@@ -239,6 +292,7 @@ case class LogLoss(numClasses: Int) extends GBMLoss {
     i = 0
     while (i < numClasses) {
       res(i) = math.exp(prediction(i) - logsumexp)
+      // xgboost impl
       res(i) = math.max(2 * res(i) * (1 - res(i)), 1e-6)
       i += 1
     }

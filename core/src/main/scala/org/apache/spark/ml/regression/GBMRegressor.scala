@@ -16,23 +16,24 @@
 
 package org.apache.spark.ml.regression
 
-import breeze.linalg.{DenseVector => BDV}
-import breeze.optimize.CachedDiffFunction
-import breeze.optimize.{LBFGS => BreezeLBFGS}
-import breeze.optimize.{LBFGSB => BreezeLBFGSB}
-import breeze.optimize.{OWLQN => BreezeOWLQN}
+import org.apache.commons.math3.optim.MaxEval
+import org.apache.commons.math3.optim.MaxIter
+import org.apache.commons.math3.optim.nonlinear.scalar.GoalType
+import org.apache.commons.math3.optim.univariate.BrentOptimizer
+import org.apache.commons.math3.optim.univariate.SearchInterval
+import org.apache.commons.math3.optim.univariate.UnivariateObjectiveFunction
 import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.PredictionModel
 import org.apache.spark.ml.Predictor
-import org.apache.spark.ml.boosting.GBMInstance
 import org.apache.spark.ml.boosting.GBMParams
 import org.apache.spark.ml.boosting._
 import org.apache.spark.ml.ensemble.EnsemblePredictionModelType
 import org.apache.spark.ml.ensemble.EnsembleRegressorType
 import org.apache.spark.ml.ensemble.HasBaseLearner
 import org.apache.spark.ml.linalg.Vector
-import org.apache.spark.ml.optim.loss.RDDLossFunction
+import org.apache.spark.ml.dummy.DummyRegressionModel
+import org.apache.spark.ml.dummy.DummyRegressor
 import org.apache.spark.ml.param.DoubleParam
 import org.apache.spark.ml.param.Param
 import org.apache.spark.ml.param.ParamMap
@@ -56,7 +57,7 @@ private[ml] trait GBMRegressorParams extends GBMParams {
 
   /**
    * Loss function which Boosting tries to minimize. (case-insensitive) Supported: "squared",
-   * "absolute", "huber", "quantile". (default = ls)
+   * "absolute", "huber", "quantile". (default = squared)
    *
    * @group param
    */
@@ -96,16 +97,14 @@ private[ml] trait GBMRegressorParams extends GBMParams {
 private[ml] object GBMRegressorParams {
 
   final val supportedLossTypes: Array[String] =
-    Array("squared", "absolute", "huber", "quantile", "logcosh").map(_.toLowerCase(Locale.ROOT))
+    Array("squared", "absolute", "huber", "quantile").map(_.toLowerCase(Locale.ROOT))
 
   def loss(loss: String, alpha: Double): GBMScalarLoss =
     loss match {
       case "squared" => SquaredLoss
       case "absolute" => AbsoluteLoss
       case "huber" => HuberLoss(alpha)
-      // case "quantile" => QuantileLoss(alpha)
-      case "logcosh" => LogCoshLoss
-      // case "quantile" => ScaledLogCoshLoss(alpha)
+      case "quantile" => QuantileLoss(alpha)
       case _ => throw new RuntimeException(s"GBMRegressor was given bad loss type: $loss")
     }
 
@@ -152,6 +151,9 @@ class GBMRegressor(override val uid: String)
 
   /** @group setParam */
   def setNumBaseLearners(value: Int): this.type = set(numBaseLearners, value)
+
+  /** @group setParam */
+  def setInitStrategy(value: String): this.type = set(initStrategy, value)
 
   /** @group setParam */
   def setLoss(value: String): this.type = set(loss, value)
@@ -245,67 +247,73 @@ class GBMRegressor(override val uid: String)
       val models = Array.ofDim[EnsemblePredictionModelType]($(numBaseLearners))
       val weights = Array.ofDim[Double]($(numBaseLearners))
 
-      var predictions = trainDataset.map(_ => 0.0)
+      var init = getInitStrategy match {
+        case "base" =>
+          fitBaseLearner($(baseLearner), "label", "features", $(predictionCol), Some("weight"))(
+            spark.createDataFrame(trainDataset))
+        case "zero" | "constant" =>
+          val dummy = getInitStrategy match {
+            case "zero" => new DummyRegressor().setStrategy("constant").setConstant(0.0)
+            case "constant" =>
+              getLoss match {
+                case "squared" => new DummyRegressor().setStrategy("mean")
+                case "absolute" | "huber" => new DummyRegressor().setStrategy("median")
+                case "quantile" =>
+                  new DummyRegressor().setStrategy("quantile").setQuantile($(alpha))
+              }
+          }
+          dummy.fit(spark.createDataFrame(trainDataset))
+      }
+
+      var quantile = getLoss match {
+        case "huber" => dataset.stat.approxQuantile("label", Array($(alpha)), $(tol))(0)
+        case _ => $(alpha)
+      }
+
+      val gbmLoss = GBMRegressorParams.loss(getLoss, _)
+      val gbmDiffFunction =
+        (quantile: Double) => new GBMDiffFunction(gbmLoss(quantile), trainDataset)
+
+      val optimizer = new BrentOptimizer($(tol), $(tol))
+
+      init = $(optimizedWeights) match {
+        case true if (getInitStrategy == "constant") =>
+          val initGbmLineSearch = GBMLineSearch.functionFromSearchDirection(
+            gbmDiffFunction(quantile),
+            trainDataset.map(_ => 0),
+            trainDataset.map(_ => 1))
+          val objective = new UnivariateObjectiveFunction(x => initGbmLineSearch.valueAt(x));
+          val stats = trainDataset.map(_.label).stats()
+          val searchInterval = new SearchInterval(
+            stats.min,
+            stats.max,
+            init.asInstanceOf[DummyRegressionModel].prediction);
+          val optimizedConstant = optimizer
+            .optimize(
+              objective,
+              searchInterval,
+              GoalType.MINIMIZE,
+              new MaxIter($(maxIter)),
+              new MaxEval($(maxIter)))
+            .getPoint()
+          val newInit = new DummyRegressionModel(optimizedConstant)
+          newInit.setParent(init.parent.asInstanceOf[DummyRegressor])
+          copyValues(newInit, init.paramMap)
+        case _ => init
+      }
+
+      var predictions = trainDataset.map(instance => init.predict(instance.features))
       val predictionsCheckpointer = new PeriodicRDDCheckpointer[Double](
         $(checkpointInterval),
         sc,
         StorageLevel.MEMORY_AND_DISK)
       predictionsCheckpointer.update(predictions)
 
-      val initGbmInstances =
-        trainDataset
-          .zip(predictions)
-          .map { case (instance, prediction) =>
-            GBMInstance(instance.label, instance.weight, 0, 1.0)
-          }
-          .persist(StorageLevel.MEMORY_AND_DISK)
-
-      var quantile = $(loss) match {
-        case "huber" => dataset.stat.approxQuantile("label", Array($(alpha)), $(tol))(0)
-        case _ => $(alpha)
-      }
-
-      val gbmLoss = GBMRegressorParams.loss($(loss), _)
-      val getAggregatorFunc = (_: GBMLoss) => new GBMAggregator(gbmLoss(quantile))(_)
-
-      val initCostFun =
-        new RDDLossFunction(initGbmInstances, getAggregatorFunc(gbmLoss(quantile)), None)
-
-      val constOptimizer = new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
-
-      // val lowerBounds = BDV[Double](Array.fill(1)(Double.MinValue))
-      // val upperBounds = BDV[Double](Array.fill(1)(Double.MaxValue))
-      // val optimizer = new BreezeLBFGSB(lowerBounds, upperBounds, $(maxIter), 10, $(tol))
-
-      val labels = trainDataset.map(_.label)
-      val initConst = $(loss) match {
-        case "squared" => labels.mean()
-        case "huber" | "absolute" | "quantile" | "logcosh" =>
-          val labelsDF = spark.createDataset(labels).toDF("label")
-          val constQuantile = ($(loss)) match {
-            case "huber" | "absolute" | "logcosh" => 0.5
-            case "quantile" => $(alpha)
-          }
-          labelsDF.stat.approxQuantile("label", Array(constQuantile), $(tol))(0)
-      }
-
-      val const = $(optimizedWeights) match {
-        case true =>
-          constOptimizer.minimize(new CachedDiffFunction(initCostFun), BDV[Double](initConst))(0)
-        case false => initConst
-
-      }
-
-      initGbmInstances.unpersist()
-
-      predictions = predictions.map(_ => const)
-      predictionsCheckpointer.update(predictions)
-
       var validationPredictions: RDD[Double] = null
       var validatePredictionsCheckpointer: PeriodicRDDCheckpointer[Double] = null
       var bestValidationError: Double = 0.0
       if (withValidation) {
-        validationPredictions = validationDataset.map(_ => const)
+        validationPredictions = validationDataset.map(instance => init.predict(instance.features))
         validatePredictionsCheckpointer = new PeriodicRDDCheckpointer[Double](
           $(checkpointInterval),
           sc,
@@ -319,23 +327,11 @@ class GBMRegressor(override val uid: String)
           .mean()
       }
 
-      // val optimizer = $(loss) match {
-      //   case "squared" | "huber" =>
-      //     val lowerBounds = BDV[Double](Array.fill(1)(0.0))
-      //     val upperBounds = BDV[Double](Array.fill(1)(Double.MaxValue))
-      //     new BreezeLBFGSB(lowerBounds, upperBounds, $(maxIter), 10, $(tol))
-      //   case "absolute" | "quantile" =>
-      //     new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, 0, $(tol))
-      // }
-      val lowerBounds = BDV[Double](Array.fill(1)(0.0))
-      val upperBounds = BDV[Double](Array.fill(1)(Double.MaxValue))
-      val optimizer = new BreezeLBFGSB(lowerBounds, upperBounds, $(maxIter), 10, $(tol))
-
       var i = 0
       var v = 0
       while (i < $(numBaseLearners) && v < $(numRounds)) {
 
-        $(loss) match {
+        getLoss match {
           case "huber" =>
             val residuals = trainDataset.zip(predictions).map { case (instance, prediction) =>
               math.abs(instance.label - prediction)
@@ -348,24 +344,23 @@ class GBMRegressor(override val uid: String)
           case _ => ()
         }
 
-        val instances = $(updates) match {
-          case "gradient" =>
-            trainDataset.zip(predictions).map { case (instance, prediction) =>
-              instance.copy(label =
-                gbmLoss(quantile).negativeGradient(instance.label, prediction))
-            }
-          case "newton" =>
+        val instances = gbmLoss(quantile) match {
+          case gbmLoss: HasScalarHessian if (getUpdates == "newton") =>
             val hessians = trainDataset.zip(predictions).map { case (instance, prediction) =>
-              math.max(gbmLoss(quantile).hessian(instance.label, prediction), $(tol))
+              gbmLoss.hessian(instance.label, prediction)
             }
             val sumHessians = hessians.treeReduce(_ + _, $(aggregationDepth))
             trainDataset.zip(predictions).zip(hessians).map {
               case ((instance, prediction), hessian) =>
-                val negGrad = gbmLoss(quantile).negativeGradient(instance.label, prediction)
+                val negGrad = gbmLoss.negativeGradient(instance.label, prediction)
                 (instance
                   .copy(
                     label = negGrad / hessian,
                     weight = 1.0 / 2.0 * hessian / sumHessians * instance.weight))
+            }
+          case gbmLoss =>
+            trainDataset.zip(predictions).map { case (instance, prediction) =>
+              instance.copy(label = gbmLoss.negativeGradient(instance.label, prediction))
             }
         }
 
@@ -373,23 +368,26 @@ class GBMRegressor(override val uid: String)
           fitBaseLearner($(baseLearner), "label", "features", $(predictionCol), Some("weight"))(
             spark.createDataFrame(instances))
 
-        val gbmInstances = trainDataset
-          .zip(predictions)
-          .map { case (instance, prediction) =>
-            GBMInstance(
-              instance.label,
-              instance.weight,
-              prediction,
-              model.predict(instance.features))
-          }
+        val direction = trainDataset
+          .map(instance => model.predict(instance.features))
           .persist(StorageLevel.MEMORY_AND_DISK)
 
-        val init = BDV[Double](1)
-        val costFun =
-          new RDDLossFunction(gbmInstances, getAggregatorFunc(gbmLoss(quantile)), None)
-
         val solution = $(optimizedWeights) match {
-          case true => optimizer.minimize(new CachedDiffFunction(costFun), init)(0)
+          case true =>
+            val gbmLineSearch = GBMLineSearch.functionFromSearchDirection(
+              gbmDiffFunction(quantile),
+              predictions,
+              direction)
+            val objective = new UnivariateObjectiveFunction(x => gbmLineSearch.valueAt(x));
+            val searchInterval = new SearchInterval(0, 10, 1);
+            optimizer
+              .optimize(
+                objective,
+                searchInterval,
+                GoalType.MINIMIZE,
+                new MaxIter($(maxIter)),
+                new MaxEval($(maxIter)))
+              .getPoint()
           case false => 1.0
         }
 
@@ -399,13 +397,13 @@ class GBMRegressor(override val uid: String)
         weights(i) = weight
 
         predictions = trainDataset
+          .zip(direction)
           .zip(predictions)
-          .map { case (instance, prediction) =>
-            prediction + weight * model.predict(instance.features)
+          .map { case ((instance, direction), prediction) =>
+            prediction + weight * direction
           }
         predictionsCheckpointer.update(predictions)
-
-        gbmInstances.unpersist()
+        direction.unpersist()
 
         if (withValidation) {
           validationPredictions = validationDataset
@@ -441,7 +439,7 @@ class GBMRegressor(override val uid: String)
         weights.take(i - v),
         Array.fill($(numBaseLearners))(Array.range(0, numFeatures)),
         models.take(i - v),
-        const)
+        init)
 
     }
 
@@ -484,7 +482,7 @@ class GBMRegressionModel(
     val weights: Array[Double],
     val subspaces: Array[Array[Int]],
     val models: Array[EnsemblePredictionModelType],
-    val const: Double)
+    val init: EnsemblePredictionModelType)
     extends PredictionModel[Vector, GBMRegressionModel]
     with GBMRegressorParams
     with MLWritable {
@@ -493,13 +491,13 @@ class GBMRegressionModel(
       weights: Array[Double],
       subspaces: Array[Array[Int]],
       models: Array[EnsemblePredictionModelType],
-      const: Double) =
-    this(Identifiable.randomUID("BoostingRegressionModel"), weights, subspaces, models, const)
+      init: EnsemblePredictionModelType) =
+    this(Identifiable.randomUID("BoostingRegressionModel"), weights, subspaces, models, init)
 
   val numBaseModels: Int = models.length
 
   override def predict(features: Vector): Double = {
-    var sum = const
+    var sum = init.predict(features)
     var i = 0
     while (i < numBaseModels) {
       sum += models(i).predict(slicer(subspaces(i))(features)) * weights(i)
@@ -509,7 +507,7 @@ class GBMRegressionModel(
   }
 
   override def copy(extra: ParamMap): GBMRegressionModel = {
-    val copied = new GBMRegressionModel(uid, weights, subspaces, models, const)
+    val copied = new GBMRegressionModel(uid, weights, subspaces, models, init)
     copyValues(copied, extra).setParent(parent)
   }
 
@@ -528,7 +526,7 @@ object GBMRegressionModel extends MLReadable[GBMRegressionModel] {
   private[GBMRegressionModel] class GBMRegressionModelWriter(instance: GBMRegressionModel)
       extends MLWriter {
 
-    private case class Data(weight: Double, subspace: Array[Int], const: Double)
+    private case class Data(weight: Double, subspace: Array[Int])
 
     override protected def saveImpl(path: String): Unit = {
       GBMRegressorParams.saveImpl(
@@ -536,17 +534,18 @@ object GBMRegressionModel extends MLReadable[GBMRegressionModel] {
         path,
         sc,
         Some("numBaseModels" -> instance.numBaseModels))
+      val initPath = new Path(path, s"init").toString
+      instance.init.asInstanceOf[MLWritable].save(initPath)
       instance.models.map(_.asInstanceOf[MLWritable]).zipWithIndex.foreach { case (model, idx) =>
         val modelPath = new Path(path, s"model-$idx").toString
         model.save(modelPath)
       }
       instance.weights.zip(instance.subspaces).zipWithIndex.foreach {
         case ((weight, subspace), idx) =>
-          val data = Data(weight, subspace, instance.const)
+          val data = Data(weight, subspace)
           val dataPath = new Path(path, s"data-$idx").toString
           sparkSession.createDataFrame(Seq(data)).repartition(1).write.json(dataPath)
       }
-
     }
   }
 
@@ -559,27 +558,21 @@ object GBMRegressionModel extends MLReadable[GBMRegressionModel] {
       implicit val format: DefaultFormats = DefaultFormats
       val (metadata, _) = GBMRegressorParams.loadImpl(path, sc, className)
       val numModels = (metadata.metadata \ "numBaseModels").extract[Int]
+      val initPath = new Path(path, s"init").toString
+      val init = DefaultParamsReader.loadParamsInstance[EnsemblePredictionModelType](initPath, sc)
       val models = (0 until numModels).toArray.map { idx =>
         val modelPath = new Path(path, s"model-$idx").toString
         DefaultParamsReader.loadParamsInstance[EnsemblePredictionModelType](modelPath, sc)
       }
       val boostsData = (0 until numModels).toArray.map { idx =>
         val dataPath = new Path(path, s"data-$idx").toString
-        val data = sparkSession.read.json(dataPath).select("weight", "subspace", "const").head()
-        (
-          data.getAs[Double](0),
-          data.getAs[Seq[Long]](1).map(_.toInt).toArray,
-          data.getAs[Double](2))
-      }.unzip3
-      val bcModel =
-        new GBMRegressionModel(
-          metadata.uid,
-          boostsData._1,
-          boostsData._2,
-          models,
-          boostsData._3(0))
-      metadata.getAndSetParams(bcModel)
-      bcModel
+        val data = sparkSession.read.json(dataPath).select("weight", "subspace").head()
+        (data.getAs[Double](0), data.getAs[Seq[Long]](1).map(_.toInt).toArray)
+      }.unzip
+      val gbmrModel =
+        new GBMRegressionModel(metadata.uid, boostsData._1, boostsData._2, models, init)
+      metadata.getAndSetParams(gbmrModel)
+      gbmrModel
     }
   }
 }

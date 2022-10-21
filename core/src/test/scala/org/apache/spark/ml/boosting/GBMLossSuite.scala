@@ -54,6 +54,16 @@ class GBMLossSuite extends AnyFunSuite with BeforeAndAfterAll with ScalaCheckPro
 
     val sc = spark.sparkContext
 
+    val gbmLossesWithHessian =
+      Seq(SquaredLoss, LogCoshLoss, ScaledLogCoshLoss(0.9)).map(gbmLoss =>
+        new GBMScalarLoss {
+          override def loss(label: Double, prediction: Double): Double =
+            gbmLoss.gradient(label, prediction)
+
+          override def gradient(label: Double, prediction: Double): Double =
+            gbmLoss.hessian(label, prediction)
+        })
+
     val gen = for {
       loss <- Gen.oneOf(
         Seq(
@@ -62,7 +72,7 @@ class GBMLossSuite extends AnyFunSuite with BeforeAndAfterAll with ScalaCheckPro
           HuberLoss(0.9),
           QuantileLoss(0.9),
           LogCoshLoss,
-          ScaledLogCoshLoss(0.9)))
+          ScaledLogCoshLoss(0.9)).appendedAll(gbmLossesWithHessian))
     } yield (loss)
 
     forAll(gen) { case gbmLoss =>
@@ -79,39 +89,4 @@ class GBMLossSuite extends AnyFunSuite with BeforeAndAfterAll with ScalaCheckPro
       assert(GradientTester.test[Int, BDV[Double]](costFun, x).apply(0) < 1e-6)
     }
   }
-
-  test("verify gradients and hessians of scalar losses") {
-
-    val sc = spark.sparkContext
-
-    val gen = for {
-      loss <- Gen.oneOf(Seq(SquaredLoss, LogCoshLoss, ScaledLogCoshLoss(0.9)))
-    } yield (loss)
-
-    forAll(gen) { case gbmLoss =>
-      val labels = RandomRDDs.normalRDD(sc, 1000)
-      val predictions = RandomRDDs.normalRDD(sc, 1000)
-      val gbmInstances = labels.zip(predictions).map { case (label, prediciton) =>
-        GBMInstance(label, 1.0, 0.0, prediciton)
-      }
-      val newLoss = new GBMScalarLoss {
-
-        override def loss(label: Double, prediction: Double): Double =
-          gbmLoss.gradient(label, prediction)
-
-        override def gradient(label: Double, prediction: Double): Double =
-          gbmLoss.hessian(label, prediction)
-
-        override def hessian(label: Double, prediction: Double): Double = ???
-
-      }
-      val getAggregatorFunc = new GBMAggregator(newLoss)(_)
-
-      val x = BDV[Double](1)
-      val costFun =
-        new RDDLossFunction(gbmInstances, getAggregatorFunc, None)
-      assert(GradientTester.test[Int, BDV[Double]](costFun, x).apply(0) < 1e-5)
-    }
-  }
-
 }

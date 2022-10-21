@@ -36,6 +36,24 @@ private[ml] trait GBMParams
     with HasSubBag {
 
   /**
+   * strategy for the init predictions, can be a constant optimized for the minimized loss, zero,
+   * or the base learner learned on labels. (case-insensitive) Supported: "constant", "zero",
+   * "base". (default = constant)
+   *
+   * @group param
+   */
+  val initStrategy: Param[String] =
+    new Param(
+      this,
+      "initStrategy",
+      s"""strategy for the init predictions, can be a constant optimized for the minimized loss, zero, or the base learner learned on labels, (case-insensitive). Supported options: ${GBMParams.supportedInitStrategy
+          .mkString(",")}""",
+      ParamValidators.inArray(GBMParams.supportedInitStrategy))
+
+  /** @group getParam */
+  def getInitStrategy: String = $(initStrategy).toLowerCase(Locale.ROOT)
+
+  /**
    * param for using optimized weights in GBM
    *
    * @group param
@@ -65,8 +83,6 @@ private[ml] trait GBMParams
 
   /** @group getParam */
   def getUpdates: String = $(updates).toLowerCase(Locale.ROOT)
-
-  setDefault(updates -> "gradient")
 
   /**
    * param for the learning rate of the algorithm
@@ -114,18 +130,20 @@ private[ml] trait GBMParams
   val numRounds: Param[Int] =
     new IntParam(
       this,
-      "numRound",
+      "numRounds",
       "number of round waiting for next decrease in validation set",
       ParamValidators.gtEq(1))
 
   /** @group getParam */
   def getNumRounds: Int = $(numRounds)
 
+  setDefault(initStrategy, "constant")
   setDefault(optimizedWeights -> true)
-  setDefault(learningRate -> 0.1)
+  setDefault(updates -> "gradient")
+  setDefault(learningRate -> 1.0)
   setDefault(numBaseLearners -> 10)
-  setDefault(tol -> 1e-6)
-  setDefault(maxIter -> 100)
+  setDefault(tol -> 1e-2)
+  setDefault(maxIter -> 10)
   setDefault(numRounds -> 1)
   setDefault(validationTol -> 0.01)
 
@@ -134,4 +152,6 @@ private[ml] trait GBMParams
 private[ml] object GBMParams {
   final val supportedUpdates: Array[String] =
     Array("newton", "gradient").map(_.toLowerCase(Locale.ROOT))
+  final val supportedInitStrategy: Array[String] =
+    Array("constant", "zero", "base").map(_.toLowerCase(Locale.ROOT))
 }
