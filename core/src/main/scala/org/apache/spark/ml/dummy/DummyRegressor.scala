@@ -167,6 +167,10 @@ class DummyRegressionModel(override val uid: String, val prediction: Double)
 
   def predict(features: Vector): Double = prediction
 
+  override def toString: String = {
+    s"DummyRegressionModel: uid=$uid, prediction=$prediction"
+  }
+
 }
 
 object DummyRegressionModel extends MLReadable[DummyRegressionModel] {

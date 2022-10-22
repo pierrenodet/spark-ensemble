@@ -27,7 +27,6 @@ import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.Param
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.ParamPair
-import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.Dataset
@@ -162,69 +161,45 @@ class BaggingClassifier(override val uid: String)
         subspaceRatio,
         seed)
 
-      val weightColIsUsed = isDefined(weightCol) && $(weightCol).nonEmpty && {
-        $(baseLearner) match {
-          case _: HasWeightCol => true
-          case c =>
-            instr.logWarning(s"weightCol is ignored, as it is not supported by $c now.")
-            false
-        }
-      }
+      val spark = dataset.sparkSession
+      val sc = spark.sparkContext
 
-      val df = if (weightColIsUsed) {
-        dataset.select($(labelCol), $(weightCol), $(featuresCol))
-      } else {
-        dataset.select($(labelCol), $(featuresCol))
-      }
+      val instances = extractInstances(dataset)
+      instances.persist(StorageLevel.MEMORY_AND_DISK)
 
-      val optWeightColName = if (weightColIsUsed) {
-        Some($(weightCol))
-      } else {
-        None
-      }
-
-      val handlePersistence =
-        dataset.storageLevel == StorageLevel.NONE && (df.storageLevel == StorageLevel.NONE)
-      if (handlePersistence) {
-        df.persist(StorageLevel.MEMORY_AND_DISK)
-      }
-
-      val numFeatures = MetadataUtils.getNumFeatures(df, $(featuresCol))
-
-      val numClasses = getNumClasses(df)
+      val numFeatures = MetadataUtils.getNumFeatures(dataset, getFeaturesCol)
+      val numClasses = getNumClasses(dataset)
       instr.logNumClasses(numClasses)
       validateNumClasses(numClasses)
 
-      val futureModels = Array
-        .range(0, $(numBaseLearners))
-        .map(iter =>
-          Future[(Array[Int], EnsemblePredictionModelType)] {
+      val subspaces =
+        Array.tabulate($(numBaseLearners))(i =>
+          subspace($(subspaceRatio), numFeatures, $(seed) + i))
 
-            val (subspace, subbagged) = subbag(
-              $(featuresCol),
-              $(replacement),
-              $(subsampleRatio),
-              $(subsampleRatio),
-              numFeatures,
-              $(seed) + iter)(df)
+      val futureModels = subspaces
+        .map(subspace =>
+          Future[EnsemblePredictionModelType] {
 
-            val bagger =
-              fitBaseLearner(
-                $(baseLearner),
-                $(labelCol),
-                $(featuresCol),
-                $(predictionCol),
-                optWeightColName)(subbagged)
+            val bag = instances
+              .sample($(replacement), $(subsampleRatio), $(seed))
+            val subbag =
+              bag.map(instance => instance.copy(features = slice(subspace)(instance.features)))
 
-            (subspace, bagger)
+            val featuresMetadata =
+              Utils.getFeaturesMetadata(dataset, $(featuresCol), Some(subspace))
+
+            val df = spark
+              .createDataFrame(subbag)
+              .withMetadata("features", featuresMetadata)
+
+            fitBaseLearner($(baseLearner), "label", "features", $(predictionCol), Some("weight"))(
+              df)
 
           }(getExecutionContext))
 
-      val (subspaces, models) = futureModels.map(ThreadUtils.awaitResult(_, Duration.Inf)).unzip
+      val models = futureModels.map(ThreadUtils.awaitResult(_, Duration.Inf))
 
-      if (handlePersistence) {
-        df.unpersist()
-      }
+      instances.unpersist()
 
       new BaggingClassificationModel(numClasses, subspaces, models)
 
@@ -290,11 +265,11 @@ class BaggingClassificationModel(
       val rawPrediction = model match {
         case model: ProbabilisticClassificationModel[Vector, _]
             if ($(votingStrategy) == "soft") =>
-          model.predictProbability(slicer(subspace)(features))
+          model.predictProbability(slice(subspace)(features))
         case model: ClassificationModel[Vector, _] if ($(votingStrategy) == "hard") =>
           Vectors.sparse(
             numClasses,
-            Array(model.predict(slicer(subspace)(features)).toInt),
+            Array(model.predict(slice(subspace)(features)).toInt),
             Array(1.0))
         case _ =>
           throw new SparkException(s"""voting strategy "${$(

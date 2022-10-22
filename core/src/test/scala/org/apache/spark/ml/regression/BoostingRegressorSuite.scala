@@ -48,30 +48,6 @@ class BoostingRegressorSuite extends AnyFunSuite with BeforeAndAfterAll {
     spark.stop()
   }
 
-  // test("benchmark") {
-
-  //   val raw =
-  //     spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm")
-  //   val data = Seq.fill(200)(raw).reduce(_ union _).checkpoint()
-  //   data.count()
-
-  //   val dtr = new DecisionTreeRegressor()
-  //   val br = new BoostingRegressor()
-  //     .setBaseLearner(dtr)
-  //     .setNumBaseLearners(10)
-  //   val gbtr = new GBTRegressor().setMaxIter(10)
-
-  //   val re = new RegressionEvaluator().setMetricName("rmse")
-
-  //   val splits = data.randomSplit(Array(0.7, 0.3), 0L)
-  //   val (train, test) = (splits(0), splits(1))
-
-  //   val dtrModel = spark.time(dtr.fit(train))
-  //   val brModel = spark.time(br.fit(train))
-  //   val gbtrModel = spark.time(gbtr.fit(train))
-
-  // }
-
   test("boosting regressor is better than baseline regressor") {
 
     val data =
@@ -117,7 +93,7 @@ class BoostingRegressorSuite extends AnyFunSuite with BeforeAndAfterAll {
 
     val brModel = br.fit(train)
 
-    val metrics = ListBuffer.empty[Double]
+    var metrics = ListBuffer.empty[Double]
     Array
       .range(1, brModel.numModels + 1)
       .foreach(i => {
@@ -188,6 +164,21 @@ class BoostingRegressorSuite extends AnyFunSuite with BeforeAndAfterAll {
     val re = new RegressionEvaluator().setMetricName("rmse")
     assert(re.evaluate(learned.transform(data)) == 0.0)
     assert(learned.models.size < 20)
+  }
+
+  test("wrong label col throws error") {
+    val data =
+      spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm").cache()
+    data.count()
+
+    val dtr = new DecisionTreeRegressor()
+    val br = new BoostingRegressor()
+      .setBaseLearner(dtr)
+      .setNumBaseLearners(5)
+      .setLabelCol("kek")
+
+    assertThrows[IllegalArgumentException](br.fit(data))
+
   }
 
 }

@@ -22,9 +22,9 @@ import org.apache.spark.ml.bagging.BaggingParams
 import org.apache.spark.ml.ensemble.EnsemblePredictionModelType
 import org.apache.spark.ml.ensemble.EnsembleRegressorType
 import org.apache.spark.ml.ensemble.HasBaseLearner
+import org.apache.spark.ml.ensemble.Utils
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.ml.util._
 import org.apache.spark.sql._
@@ -129,64 +129,42 @@ class BaggingRegressor(override val uid: String)
         subspaceRatio,
         seed)
 
-      val weightColIsUsed = isDefined(weightCol) && $(weightCol).nonEmpty && {
-        getBaseLearner match {
-          case _: HasWeightCol => true
-          case c =>
-            instr.logWarning(s"weightCol is ignored, as it is not supported by $c now.")
-            false
-        }
-      }
+      val spark = dataset.sparkSession
+      val sc = spark.sparkContext
 
-      val df = if (weightColIsUsed) {
-        dataset.select($(labelCol), $(weightCol), $(featuresCol))
-      } else {
-        dataset.select($(labelCol), $(featuresCol))
-      }
+      val instances = extractInstances(dataset)
+      instances.persist(StorageLevel.MEMORY_AND_DISK)
 
-      val optWeightColName = if (weightColIsUsed) {
-        Some($(weightCol))
-      } else {
-        None
-      }
+      val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
 
-      val handlePersistence =
-        dataset.storageLevel == StorageLevel.NONE && (df.storageLevel == StorageLevel.NONE)
-      if (handlePersistence) {
-        df.persist(StorageLevel.MEMORY_AND_DISK)
-      }
+      val subspaces =
+        Array.tabulate($(numBaseLearners))(i =>
+          subspace($(subspaceRatio), numFeatures, $(seed) + i))
 
-      val numFeatures = MetadataUtils.getNumFeatures(df, getFeaturesCol)
+      val futureModels = subspaces
+        .map(subspace =>
+          Future[EnsemblePredictionModelType] {
 
-      val futureModels = Array
-        .range(0, getNumBaseLearners)
-        .map(iter =>
-          Future[(Array[Int], EnsemblePredictionModelType)] {
+            val bagged = instances
+              .sample($(replacement), $(subsampleRatio), $(seed))
+            val subbagged =
+              bagged.map(instance => instance.copy(features = slice(subspace)(instance.features)))
 
-            val (subspace, subbagged) = subbag(
-              getFeaturesCol,
-              getReplacement,
-              getSubsampleRatio,
-              getSubspaceRatio,
-              numFeatures,
-              getSeed + iter)(df)
+            val featuresMetadata =
+              Utils.getFeaturesMetadata(dataset, $(featuresCol), Some(subspace))
 
-            val bagger =
-              fitBaseLearner(
-                getBaseLearner,
-                getLabelCol,
-                getFeaturesCol,
-                getPredictionCol,
-                optWeightColName)(subbagged)
-            (subspace, bagger)
+            val df = spark
+              .createDataFrame(subbagged)
+              .withMetadata("features", featuresMetadata)
+
+            fitBaseLearner($(baseLearner), "label", "features", $(predictionCol), Some("weight"))(
+              df)
 
           }(getExecutionContext))
 
-      val (subspaces, models) = futureModels.map(ThreadUtils.awaitResult(_, Duration.Inf)).unzip
+      val models = futureModels.map(ThreadUtils.awaitResult(_, Duration.Inf))
 
-      if (handlePersistence) {
-        df.unpersist()
-      }
+      instances.unpersist()
 
       new BaggingRegressionModel(subspaces, models)
 
@@ -243,7 +221,7 @@ class BaggingRegressionModel(
     var sum = 0d
     var i = 0
     while (i < numBaseModels) {
-      sum += models(i).predict(slicer(subspaces(i))(features)); i += 1
+      sum += models(i).predict(slice(subspaces(i))(features)); i += 1
     }
     sum / numBaseModels
   }

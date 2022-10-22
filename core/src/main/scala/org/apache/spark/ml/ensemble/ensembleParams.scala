@@ -71,12 +71,11 @@ private[ml] trait HasBaseLearner[L <: EnsemblePredictorType] extends Params {
     paramMap.put(baseLearner.featuresCol -> featuresColName)
     paramMap.put(baseLearner.predictionCol -> predictionColName)
 
-    if (weightColName.isDefined) {
-      val baseLearner_ = baseLearner.asInstanceOf[L with HasWeightCol]
-      paramMap.put(baseLearner_.weightCol -> weightColName.get)
-      baseLearner_.fit(df, paramMap)
-    } else {
-      baseLearner.fit(df, paramMap)
+    baseLearner match {
+      case baseLearner: HasWeightCol if (weightColName.isDefined) =>
+        paramMap.put(baseLearner.weightCol -> weightColName.get)
+        baseLearner.fit(df, paramMap)
+      case _ => baseLearner.fit(df, paramMap)
     }
   }
 

@@ -17,6 +17,9 @@
 package org.apache.spark.ml.ensemble
 
 import scala.reflect.ClassTag
+import org.apache.spark.sql.types.Metadata
+import org.apache.spark.sql.Dataset
+import org.apache.spark.ml.attribute.AttributeGroup
 
 object Utils {
 
@@ -34,6 +37,27 @@ object Utils {
       .map(_ >= 0.5 * sumWeights)
       .indexOf(true)
     sortedData(median)
+  }
+
+  def getFeaturesMetadata(
+      dataset: Dataset[_],
+      featuresCol: String,
+      indices: Option[Array[Int]] = None): Metadata = {
+
+    val featuresAttr = AttributeGroup.fromStructField(dataset.schema(featuresCol))
+
+    indices match {
+      case None => featuresAttr.toMetadata()
+      case Some(value) => {
+        val selectedAttrs = featuresAttr.attributes.map { attrs => value.map(attrs.apply) }
+        val outputAttr = selectedAttrs match {
+          case Some(attrs) => new AttributeGroup("features", attrs)
+          case None => new AttributeGroup("features", value.length)
+        }
+        outputAttr.toMetadata()
+      }
+    }
+
   }
 
 }

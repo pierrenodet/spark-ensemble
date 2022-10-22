@@ -40,6 +40,7 @@ import org.apache.spark.ml.impl.Utils.softmax
 import org.apache.spark.ml.util.MLReader
 import org.apache.spark.SparkException
 import org.apache.spark.ml.impl.Utils.EPSILON
+import org.apache.spark.ml.ensemble.Utils
 
 private[ml] trait BoostingClassifierParams extends BoostingParams[EnsembleClassifierType] {
 
@@ -158,6 +159,8 @@ class BoostingClassifier(override val uid: String)
         .persist(StorageLevel.MEMORY_AND_DISK)
       instances.count()
 
+      val featuresMetadata = Utils.getFeaturesMetadata(dataset, $(featuresCol))
+
       val models = Array.ofDim[EnsemblePredictionModelType]($(numBaseLearners))
       val estimatorWeights = Array.ofDim[Double]($(numBaseLearners))
 
@@ -168,7 +171,7 @@ class BoostingClassifier(override val uid: String)
         StorageLevel.MEMORY_AND_DISK)
       boostingWeightsCheckpointer.update(boostingWeights)
 
-      var sumWeights = boostingWeights.treeReduce(_ + _)
+      var sumWeights = boostingWeights.treeReduce((_ + _), $(aggregationDepth))
 
       var i = 0
       var done = false
@@ -182,9 +185,13 @@ class BoostingClassifier(override val uid: String)
             instance.copy(weight = boostingWeight / sumWeights)
           }
 
+        val df = spark
+          .createDataFrame(weighted)
+          .withMetadata("features", featuresMetadata)
+
         val model =
-          fitBaseLearner($(baseLearner), "label", "features", $(predictionCol), None)(
-            spark.createDataFrame(weighted))
+          fitBaseLearner($(baseLearner), "label", "features", $(predictionCol), Some("weight"))(
+            df)
 
         model match {
           case model: ProbabilisticClassificationModel[Vector, _] if ($(algorithm) == "real") => {
@@ -197,7 +204,8 @@ class BoostingClassifier(override val uid: String)
                 { case (acc, (instance, probability)) =>
                   acc + instance.weight * error(instance.label, probability.argmax)
                 },
-                { _ + _ })
+                { _ + _ },
+                $(aggregationDepth))
             if (estimatorError <= 0) done = true
 
             estimatorWeights(i) = 1.0
@@ -229,7 +237,8 @@ class BoostingClassifier(override val uid: String)
                 { case (acc, (instance, error)) =>
                   acc + instance.weight * error
                 },
-                { _ + _ })
+                { _ + _ },
+                $(aggregationDepth))
 
             if (estimatorError <= 0) done = true
 
@@ -256,7 +265,7 @@ class BoostingClassifier(override val uid: String)
 
         boostingWeightsCheckpointer.update(boostingWeights)
 
-        sumWeights = boostingWeights.treeReduce(_ + _)
+        sumWeights = boostingWeights.treeReduce((_ + _), $(aggregationDepth))
 
         i += 1
 

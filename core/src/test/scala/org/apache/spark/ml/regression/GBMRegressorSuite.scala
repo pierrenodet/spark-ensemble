@@ -20,17 +20,13 @@ import org.apache.spark.SparkConf
 import org.apache.spark.ml.evaluation.RegressionEvaluator
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
-import org.scalacheck.Gen
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuite
-import org.scalatest.matchers.should.Matchers._
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
 import scala.collection.mutable.ListBuffer
 
 class GBMRegressorSuite extends AnyFunSuite with BeforeAndAfterAll with ScalaCheckPropertyChecks {
-
-  import org.scalacheck.Shrink.shrinkAny
 
   var spark: SparkSession = _
 
@@ -52,91 +48,6 @@ class GBMRegressorSuite extends AnyFunSuite with BeforeAndAfterAll with ScalaChe
     spark.stop()
   }
 
-  test("benchmark") {
-
-    val raw =
-      spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm")
-    val data = Seq.fill(20)(raw).reduce(_ union _).repartition(50).checkpoint()
-    data.count()
-
-    val n = 100
-    val lr = 0.1
-    val dtr = new DecisionTreeRegressor()
-    val gbmr = new GBMRegressor()
-      .setBaseLearner(dtr)
-      .setNumBaseLearners(n)
-      .setLearningRate(lr)
-      .setLoss("absolute")
-      .setMaxIter(10)
-      .setTol(1e-2)
-    val gbmrNoOptim = new GBMRegressor()
-      .setBaseLearner(dtr)
-      .setNumBaseLearners(n)
-      .setLearningRate(lr)
-      .setLoss("absolute")
-    val gbtr = new GBTRegressor().setMaxIter(n).setStepSize(lr).setLossType("absolute")
-
-    val re = new RegressionEvaluator().setMetricName("mae")
-
-    val splits = data.randomSplit(Array(0.7, 0.3), 0L)
-    val (train, test) = (splits(0), splits(1))
-
-    val dtrModel = spark.time(dtr.fit(train))
-    val gbmrModel = spark.time(gbmr.fit(train))
-    val gbmrNoOptimModel = spark.time(gbmrNoOptim.fit(train))
-
-    val gbmrMetrics = ListBuffer.empty[Double]
-    val gbmrNoOptimMetrics = ListBuffer.empty[Double]
-    val gbtrMetrics = ListBuffer.empty[Double]
-    Array
-      .range(0, gbmrModel.numBaseModels + 1)
-      .foreach(i => {
-        val model =
-          new GBMRegressionModel(
-            gbmrModel.weights.take(i),
-            gbmrModel.subspaces.take(i),
-            gbmrModel.models.take(i),
-            gbmrModel.init)
-        gbmrMetrics += re.evaluate(model.transform(test))
-      })
-    println(gbmrMetrics)
-    println(gbmrModel.init, gbmrModel.weights.mkString(","))
-    Array
-      .range(0, gbmrNoOptimModel.numBaseModels + 1)
-      .foreach(i => {
-        val modelNoOptim =
-          new GBMRegressionModel(
-            gbmrNoOptimModel.weights.take(i),
-            gbmrNoOptimModel.subspaces.take(i),
-            gbmrNoOptimModel.models.take(i),
-            gbmrNoOptimModel.init)
-        gbmrNoOptimMetrics += re.evaluate(modelNoOptim.transform(test))
-      })
-
-    println(gbmrNoOptimMetrics)
-    println(gbmrNoOptimModel.init, gbmrNoOptimModel.weights.mkString(","))
-
-    val gbtrModel = spark.time(gbtr.fit(train))
-
-    Array
-      .range(1, gbtrModel.trees.size + 1)
-      .foreach(i => {
-        val model =
-          new GBTRegressionModel(
-            gbtrModel.uid,
-            gbtrModel.trees.take(i),
-            gbtrModel.treeWeights.take(i))
-        gbtrMetrics += re.evaluate(model.transform(test))
-      })
-    println(gbtrMetrics)
-    println(gbtrModel.treeWeights.mkString(","))
-
-    assert(re.evaluate(dtrModel.transform(test)) > re.evaluate(gbmrModel.transform(test)))
-    assert(re.evaluate(gbtrModel.transform(test)) > re.evaluate(gbmrModel.transform(test)))
-    assert(re.evaluate(gbmrNoOptimModel.transform(test)) > re.evaluate(gbmrModel.transform(test)))
-
-  }
-
   test("boosting regressor is better than baseline regressor") {
 
     val data =
@@ -148,7 +59,6 @@ class GBMRegressorSuite extends AnyFunSuite with BeforeAndAfterAll with ScalaChe
     val gbmr = new GBMRegressor()
       .setBaseLearner(dtr)
       .setNumBaseLearners(10)
-      .setLearningRate(1.0)
     val gbtr = new GBTRegressor().setMaxIter(10)
 
     val re = new RegressionEvaluator().setMetricName("rmse")

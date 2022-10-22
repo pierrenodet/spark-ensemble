@@ -193,6 +193,8 @@ class BoostingRegressor(override val uid: String)
         .persist(StorageLevel.MEMORY_AND_DISK)
       instances.count()
 
+      val featuresMetadata = Utils.getFeaturesMetadata(dataset, $(featuresCol))
+
       val models = Array.ofDim[EnsemblePredictionModelType]($(numBaseLearners))
       val estimatorWeights = Array.ofDim[Double]($(numBaseLearners))
 
@@ -203,7 +205,7 @@ class BoostingRegressor(override val uid: String)
         StorageLevel.MEMORY_AND_DISK)
       boostingWeightsCheckpointer.update(boostingWeights)
 
-      var sumWeights = boostingWeights.treeReduce(_ + _)
+      var sumWeights = boostingWeights.treeReduce((_ + _), $(aggregationDepth))
 
       var i = 0
       var best = 0
@@ -218,14 +220,18 @@ class BoostingRegressor(override val uid: String)
             instance.copy(weight = boostingWeight / sumWeights)
           }
 
+        val df = spark
+          .createDataFrame(weighted)
+          .withMetadata("features", featuresMetadata)
+
         val model =
           fitBaseLearner($(baseLearner), "label", "features", $(predictionCol), Some("weight"))(
-            spark.createDataFrame(weighted))
+            df)
 
         val errors =
           instances.map(instance => error(instance.label, model.predict(instance.features)))
 
-        val maxError = errors.treeReduce(_ max _)
+        val maxError = errors.treeReduce((_ max _), $(aggregationDepth))
 
         val losses = if (maxError == 0) {
           best = i
@@ -239,7 +245,8 @@ class BoostingRegressor(override val uid: String)
           .zip(losses)
           .treeAggregate(0d)(
             { case (acc, (instance, loss)) => acc + instance.weight * loss },
-            { _ + _ })
+            { _ + _ },
+            $(aggregationDepth))
 
         if (estimatorError >= 0.5) { best = i - 1; done = true }
 
@@ -253,7 +260,7 @@ class BoostingRegressor(override val uid: String)
           }
         boostingWeightsCheckpointer.update(boostingWeights)
 
-        sumWeights = boostingWeights.treeReduce(_ + _)
+        sumWeights = boostingWeights.treeReduce((_ + _), $(aggregationDepth))
 
         estimatorWeights(i) = estimatorWeight
         models(i) = model

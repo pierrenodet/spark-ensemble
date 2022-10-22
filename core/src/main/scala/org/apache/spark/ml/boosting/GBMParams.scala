@@ -30,7 +30,6 @@ private[ml] trait GBMParams
     extends PredictorParams
     with HasMaxIter
     with HasTol
-    with HasAggregationDepth
     with HasValidationIndicatorCol
     with BoostingParams[EnsembleRegressorType]
     with HasSubBag {
@@ -146,6 +145,7 @@ private[ml] trait GBMParams
   setDefault(maxIter -> 10)
   setDefault(numRounds -> 1)
   setDefault(validationTol -> 0.01)
+  setDefault(replacement -> false)
 
 }
 

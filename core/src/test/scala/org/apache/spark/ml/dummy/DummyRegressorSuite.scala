@@ -95,7 +95,7 @@ class DummyRegressorSuite
           .setQuantile(alpha)
           .setTol(0.0)
 
-      val dummyModel = spark.time(dummy.fit(data))
+      val dummyModel = dummy.fit(data)
       val res = strategy match {
         case "mean" => data.select(mean("label")).first().getDouble(0)
         case "median" => data.stat.approxQuantile("label", Array(0.5), 0.0)(0)

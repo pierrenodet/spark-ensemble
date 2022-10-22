@@ -51,7 +51,11 @@ class BoostingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
   test("boosting classifier is better than baseline classifier") {
 
     val data =
-      spark.read.format("libsvm").load("data/letter/letter.svm").cache()
+      spark.read
+        .format("libsvm")
+        .load("data/letter/letter.svm")
+        .withColumn("label", col("label") - lit(1))
+        .cache()
     data.count()
 
     val dtr = new DecisionTreeClassifier()
@@ -75,7 +79,11 @@ class BoostingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
   test("more base learners improves performance") {
 
     val data =
-      spark.read.format("libsvm").load("data/letter/letter.svm").cache()
+      spark.read
+        .format("libsvm")
+        .load("data/letter/letter.svm")
+        .withColumn("label", col("label") - lit(1))
+        .cache()
     data.count()
 
     val dtc = new DecisionTreeClassifier()
@@ -91,7 +99,7 @@ class BoostingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
 
     val bcModel = bc.fit(train)
 
-    val metrics = ListBuffer.empty[Double]
+    var metrics = ListBuffer.empty[Double]
     Array
       .range(1, bcModel.numModels + 1)
       .foreach(i => {
@@ -101,6 +109,8 @@ class BoostingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
           bcModel.models.take(i))
         metrics += mce.evaluate(model.transform(test))
       })
+
+    println(metrics)
 
     assert(
       metrics.toList
@@ -122,11 +132,11 @@ class BoostingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
     val lr = new DecisionTreeClassifier().setMaxDepth(10)
     val bcr = new BoostingClassifier()
       .setBaseLearner(lr)
-      .setNumBaseLearners(10)
+      .setNumBaseLearners(20)
       .setAlgorithm("real")
     val bcd = new BoostingClassifier()
       .setBaseLearner(lr)
-      .setNumBaseLearners(10)
+      .setNumBaseLearners(20)
       .setAlgorithm("discrete")
 
     val mce = new MulticlassClassificationEvaluator().setMetricName("accuracy")
@@ -139,12 +149,16 @@ class BoostingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
     val bcdModel = spark.time(bcd.fit(train))
 
     assert(
-      mce.evaluate(bcrModel.transform(test)) === mce.evaluate(bcdModel.transform(test)) +- 0.01)
+      mce.evaluate(bcrModel.transform(test)) === mce.evaluate(bcdModel.transform(test)) +- 0.02)
   }
 
   test("read/write") {
     val data =
-      spark.read.format("libsvm").load("data/letter/letter.svm").cache()
+      spark.read
+        .format("libsvm")
+        .load("data/letter/letter.svm")
+        .withColumn("label", col("label") - lit(1))
+        .cache()
     data.count()
 
     val dtc = new DecisionTreeClassifier()

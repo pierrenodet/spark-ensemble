@@ -21,13 +21,15 @@ import org.apache.spark.ml.ensemble.HasBaseLearner
 import org.apache.spark.ml.ensemble.HasNumBaseLearners
 import org.apache.spark.ml.param.shared.HasCheckpointInterval
 import org.apache.spark.ml.param.shared.HasWeightCol
+import org.apache.spark.ml.param.shared.HasAggregationDepth
 
 private[ml] trait BoostingParams[L <: EnsemblePredictorType]
     extends PredictorParams
     with HasNumBaseLearners
     with HasWeightCol
     with HasBaseLearner[L]
-    with HasCheckpointInterval {
+    with HasCheckpointInterval
+    with HasAggregationDepth {
 
   setDefault(numBaseLearners -> 20)
   setDefault(checkpointInterval -> 10)

@@ -20,6 +20,8 @@ import org.apache.spark.ml.evaluation.RegressionEvaluator
 import org.apache.spark.ml.regression.BaggingRegressionModel
 import org.apache.spark.ml.regression.BaggingRegressor
 import org.apache.spark.ml.regression.DecisionTreeRegressor
+import org.apache.spark.ml.tuning.CrossValidator
+import org.apache.spark.ml.tuning.ParamGridBuilder
 import org.apache.spark.sql._
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuite
@@ -40,6 +42,7 @@ class BaggingRegressorSuite extends AnyFunSuite with BeforeAndAfterAll {
           .setAppName("example"))
       .getOrCreate()
     spark.sparkContext.setLogLevel("ERROR")
+    spark.sparkContext.setCheckpointDir("checkpoint")
 
   }
 
@@ -56,11 +59,11 @@ class BaggingRegressorSuite extends AnyFunSuite with BeforeAndAfterAll {
     val dt = new DecisionTreeRegressor()
     val br = new BaggingRegressor()
       .setBaseLearner(dt)
-      .setNumBaseLearners(10)
-      .setReplacement(true)
-      .setSubsampleRatio(0.6)
+      .setNumBaseLearners(20)
+      .setSubsampleRatio(0.7)
+      .setSubspaceRatio(0.75)
       .setParallelism(4)
-    val rf = new RandomForestRegressor().setNumTrees(10).setSubsamplingRate(0.6)
+    val rf = new RandomForestRegressor().setNumTrees(20).setSubsamplingRate(0.7)
 
     val re = new RegressionEvaluator().setMetricName("rmse")
 
