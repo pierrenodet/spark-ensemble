@@ -16,16 +16,47 @@
 
 package org.apache.spark.ml.boosting
 
-import breeze.linalg.{DenseVector => BDV}
+import breeze.optimize.DiffFunction
 import breeze.optimize.GradientTester
+import breeze.util.SerializableLogging
 import org.apache.spark._
-import org.apache.spark.ml.optim.loss.RDDLossFunction
+import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.mllib.random.RandomRDDs
 import org.apache.spark.sql._
 import org.scalacheck.Gen
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
+
+object GradientDoubleTesting extends SerializableLogging {
+  def test(
+      f: DiffFunction[Double],
+      x: Double,
+      skipZeros: Boolean = false,
+      epsilon: Double = 1e-8,
+      tolerance: Double = 1e-3): Double = {
+    val (fx, trueGrad) = f.calculate(x)
+    var differences = 0.0
+    var xx = x
+    if (skipZeros && trueGrad == 0.0) {} else {
+      xx += epsilon
+      val grad = (f(xx) - fx) / epsilon
+      xx -= epsilon
+      val relDif = (grad - trueGrad).abs / math.max(trueGrad.abs, grad.abs).max(1e-4)
+      if (relDif < tolerance) {
+        logger.debug(s"OK: $relDif")
+      } else {
+        logger.warn(
+          "relDif: %.3e [eps : %e, calculated: %4.3e empirical: %4.3e]"
+            .format(relDif, epsilon, trueGrad, grad))
+      }
+      differences = relDif
+    }
+
+    differences
+  }
+}
 
 class GBMLossSuite extends AnyFunSuite with BeforeAndAfterAll with ScalaCheckPropertyChecks {
 
@@ -54,39 +85,37 @@ class GBMLossSuite extends AnyFunSuite with BeforeAndAfterAll with ScalaCheckPro
 
     val sc = spark.sparkContext
 
+    val losses = Seq(
+      SquaredLoss,
+      AbsoluteLoss,
+      HuberLoss(0.9),
+      QuantileLoss(0.9),
+      LogCoshLoss,
+      ScaledLogCoshLoss(0.9))
+
     val gbmLossesWithHessian =
-      Seq(SquaredLoss, LogCoshLoss, ScaledLogCoshLoss(0.9)).map(gbmLoss =>
-        new GBMScalarLoss {
+      losses.collect { case gbmLoss: HasHessian =>
+        new GBMLoss {
           override def loss(label: Double, prediction: Double): Double =
             gbmLoss.gradient(label, prediction)
 
           override def gradient(label: Double, prediction: Double): Double =
             gbmLoss.hessian(label, prediction)
-        })
+        }
+      }
 
     val gen = for {
-      loss <- Gen.oneOf(
-        Seq(
-          SquaredLoss,
-          AbsoluteLoss,
-          HuberLoss(0.9),
-          QuantileLoss(0.9),
-          LogCoshLoss,
-          ScaledLogCoshLoss(0.9)).appendedAll(gbmLossesWithHessian))
+      loss <- Gen.oneOf(losses.appendedAll(gbmLossesWithHessian))
     } yield (loss)
 
     forAll(gen) { case gbmLoss =>
-      val labels = RandomRDDs.normalRDD(sc, 1000)
+      val instances = RandomRDDs.normalRDD(sc, 1000).map(i => Instance(i, 1.0, Vectors.zeros(1)))
       val predictions = RandomRDDs.normalRDD(sc, 1000)
-      val gbmInstances = labels.zip(predictions).map { case (label, prediciton) =>
-        GBMInstance(label, 1.0, 0.0, prediciton)
-      }
-      val getAggregatorFunc = new GBMAggregator(gbmLoss)(_)
-
-      val x = BDV[Double](1)
-      val costFun =
-        new RDDLossFunction(gbmInstances, getAggregatorFunc, None)
-      assert(GradientTester.test[Int, BDV[Double]](costFun, x).apply(0) < 1e-6)
+      val directions = RandomRDDs.normalRDD(sc, 1000)
+      val f = new GBMDiffFunction(gbmLoss, instances)
+      val ff = GBMLineSearch.functionFromSearchDirection(f, predictions, directions)
+      val approx =
+        assert(GradientDoubleTesting.test(ff, 1.0) < 1e-5)
     }
   }
 }

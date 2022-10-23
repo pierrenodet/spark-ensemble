@@ -35,24 +35,6 @@ private[ml] trait GBMParams
     with HasSubBag {
 
   /**
-   * strategy for the init predictions, can be a constant optimized for the minimized loss, zero,
-   * or the base learner learned on labels. (case-insensitive) Supported: "constant", "zero",
-   * "base". (default = constant)
-   *
-   * @group param
-   */
-  val initStrategy: Param[String] =
-    new Param(
-      this,
-      "initStrategy",
-      s"""strategy for the init predictions, can be a constant optimized for the minimized loss, zero, or the base learner learned on labels, (case-insensitive). Supported options: ${GBMParams.supportedInitStrategy
-          .mkString(",")}""",
-      ParamValidators.inArray(GBMParams.supportedInitStrategy))
-
-  /** @group getParam */
-  def getInitStrategy: String = $(initStrategy).toLowerCase(Locale.ROOT)
-
-  /**
    * param for using optimized weights in GBM
    *
    * @group param
@@ -136,7 +118,6 @@ private[ml] trait GBMParams
   /** @group getParam */
   def getNumRounds: Int = $(numRounds)
 
-  setDefault(initStrategy, "constant")
   setDefault(optimizedWeights -> true)
   setDefault(updates -> "gradient")
   setDefault(learningRate -> 1.0)
@@ -152,6 +133,5 @@ private[ml] trait GBMParams
 private[ml] object GBMParams {
   final val supportedUpdates: Array[String] =
     Array("newton", "gradient").map(_.toLowerCase(Locale.ROOT))
-  final val supportedInitStrategy: Array[String] =
-    Array("constant", "zero", "base").map(_.toLowerCase(Locale.ROOT))
+
 }

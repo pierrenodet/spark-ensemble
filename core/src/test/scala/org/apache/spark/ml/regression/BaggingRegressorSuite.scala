@@ -20,8 +20,6 @@ import org.apache.spark.ml.evaluation.RegressionEvaluator
 import org.apache.spark.ml.regression.BaggingRegressionModel
 import org.apache.spark.ml.regression.BaggingRegressor
 import org.apache.spark.ml.regression.DecisionTreeRegressor
-import org.apache.spark.ml.tuning.CrossValidator
-import org.apache.spark.ml.tuning.ParamGridBuilder
 import org.apache.spark.sql._
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuite

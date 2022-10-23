@@ -24,20 +24,20 @@ import org.apache.commons.math3.optim.univariate.SearchInterval
 import org.apache.commons.math3.optim.univariate.UnivariateObjectiveFunction
 import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
-import org.apache.spark.ml.PredictionModel
-import org.apache.spark.ml.Predictor
 import org.apache.spark.ml.boosting.GBMParams
 import org.apache.spark.ml.boosting._
+import org.apache.spark.ml.dummy.DummyRegressionModel
+import org.apache.spark.ml.dummy.DummyRegressor
 import org.apache.spark.ml.ensemble.EnsemblePredictionModelType
 import org.apache.spark.ml.ensemble.EnsembleRegressorType
 import org.apache.spark.ml.ensemble.HasBaseLearner
+import org.apache.spark.ml.ensemble.Utils
 import org.apache.spark.ml.linalg.Vector
-import org.apache.spark.ml.dummy.DummyRegressionModel
-import org.apache.spark.ml.dummy.DummyRegressor
 import org.apache.spark.ml.param.DoubleParam
 import org.apache.spark.ml.param.Param
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.ParamPair
+import org.apache.spark.ml.param.ParamValidators
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.ml.util._
 import org.apache.spark.rdd.RDD
@@ -52,9 +52,26 @@ import org.json4s.jackson.JsonMethods.parse
 import org.json4s.jackson.JsonMethods.render
 
 import java.util.Locale
-import org.apache.spark.ml.ensemble.Utils
 
 private[ml] trait GBMRegressorParams extends GBMParams {
+
+  /**
+   * strategy for the init predictions, can be a constant optimized for the minimized loss, zero,
+   * or the base learner learned on labels. (case-insensitive) Supported: "constant", "zero",
+   * "base". (default = constant)
+   *
+   * @group param
+   */
+  val initStrategy: Param[String] =
+    new Param(
+      this,
+      "initStrategy",
+      s"""strategy for the init predictions, can be a constant optimized for the minimized loss, zero, or the base learner learned on labels, (case-insensitive). Supported options: ${GBMRegressorParams.supportedInitStrategy
+          .mkString(",")}""",
+      ParamValidators.inArray(GBMRegressorParams.supportedInitStrategy))
+
+  /** @group getParam */
+  def getInitStrategy: String = $(initStrategy).toLowerCase(Locale.ROOT)
 
   /**
    * Loss function which Boosting tries to minimize. (case-insensitive) Supported: "squared",
@@ -74,8 +91,6 @@ private[ml] trait GBMRegressorParams extends GBMParams {
   /** @group getParam */
   def getLoss: String = $(loss).toLowerCase(Locale.ROOT)
 
-  setDefault(loss -> "squared")
-
   /**
    * The alpha-quantile of the huber loss function and the quantile loss function. Only if
    * loss="huber" or loss="quantile". (default = 0.9)
@@ -91,7 +106,9 @@ private[ml] trait GBMRegressorParams extends GBMParams {
   /** @group getParam */
   def getAlpha: Double = $(alpha)
 
+  setDefault(loss -> "squared")
   setDefault(alpha -> 0.9)
+  setDefault(initStrategy, "constant")
 
 }
 
@@ -100,7 +117,10 @@ private[ml] object GBMRegressorParams {
   final val supportedLossTypes: Array[String] =
     Array("squared", "absolute", "huber", "quantile").map(_.toLowerCase(Locale.ROOT))
 
-  def loss(loss: String, alpha: Double): GBMScalarLoss =
+  final val supportedInitStrategy: Array[String] =
+    Array("constant", "zero", "base").map(_.toLowerCase(Locale.ROOT))
+
+  def loss(loss: String, alpha: Double): GBMLoss =
     loss match {
       case "squared" => SquaredLoss
       case "absolute" => AbsoluteLoss
@@ -140,7 +160,7 @@ private[ml] object GBMRegressorParams {
 }
 
 class GBMRegressor(override val uid: String)
-    extends Predictor[Vector, GBMRegressor, GBMRegressionModel]
+    extends Regressor[Vector, GBMRegressor, GBMRegressionModel]
     with GBMRegressorParams
     with MLWritable {
 
@@ -222,7 +242,9 @@ class GBMRegressor(override val uid: String)
         weightCol,
         featuresCol,
         predictionCol,
+        initStrategy,
         loss,
+        alpha,
         numBaseLearners,
         learningRate,
         optimizedWeights,
@@ -284,16 +306,15 @@ class GBMRegressor(override val uid: String)
       }
 
       val gbmLoss = (quantile: Double) => GBMRegressorParams.loss(getLoss, quantile)
-      val gbmDiffFunction =
-        (quantile: Double) =>
-          new GBMDiffFunction(gbmLoss(quantile), trainDataset, $(aggregationDepth))
 
       val optimizer = new BrentOptimizer($(tol), $(tol))
 
       init = $(optimizedWeights) match {
         case true if (getInitStrategy == "constant") =>
+          val gbmDiffFunction =
+            new GBMDiffFunction(gbmLoss(quantile), trainDataset, $(aggregationDepth))
           val initGbmLineSearch = GBMLineSearch.functionFromSearchDirection(
-            gbmDiffFunction(quantile),
+            gbmDiffFunction,
             trainDataset.map(_ => 0),
             trainDataset.map(_ => 1))
           val objective = new UnivariateObjectiveFunction(x => initGbmLineSearch.valueAt(x));
@@ -372,7 +393,7 @@ class GBMRegressor(override val uid: String)
         subbag.persist(StorageLevel.MEMORY_AND_DISK)
 
         val pseudoResiduals = gbmLoss(quantile) match {
-          case gbmLoss: HasScalarHessian if (getUpdates == "newton") =>
+          case gbmLoss: HasHessian if (getUpdates == "newton") =>
             val hessians = subbag.map { case (instance, prediction) =>
               gbmLoss.hessian(instance.label, prediction)
             }
@@ -409,12 +430,9 @@ class GBMRegressor(override val uid: String)
               .map { case (instance, _) => model.predict(instance.features) }
               .persist(StorageLevel.MEMORY_AND_DISK)
             val gbmDiffFunction =
-              (quantile: Double) =>
-                new GBMDiffFunction(gbmLoss(quantile), instances, $(aggregationDepth))
-            val gbmLineSearch = GBMLineSearch.functionFromSearchDirection(
-              gbmDiffFunction(quantile),
-              predictions,
-              directions)
+              new GBMDiffFunction(gbmLoss(quantile), instances, $(aggregationDepth))
+            val gbmLineSearch =
+              GBMLineSearch.functionFromSearchDirection(gbmDiffFunction, predictions, directions)
             val objective = new UnivariateObjectiveFunction(x => gbmLineSearch.valueAt(x));
             val searchInterval = new SearchInterval(0, 10, 1);
             val alpha = optimizer
@@ -520,7 +538,7 @@ class GBMRegressionModel(
     val subspaces: Array[Array[Int]],
     val models: Array[EnsemblePredictionModelType],
     val init: EnsemblePredictionModelType)
-    extends PredictionModel[Vector, GBMRegressionModel]
+    extends RegressionModel[Vector, GBMRegressionModel]
     with GBMRegressorParams
     with MLWritable {
 
