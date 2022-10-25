@@ -33,7 +33,7 @@ private[spark] case class GBMLossInstance(
     prediction: Array[Double],
     direction: Array[Double])
 
-class GBMLossAggregator(gbmLoss: GBMClassificationLoss)(bcCoefficients: Broadcast[Vector])
+class GBMLossAggregator(gbmLoss: GBMLoss)(bcCoefficients: Broadcast[Vector])
     extends DifferentiableLossAggregator[GBMLossInstance, GBMLossAggregator] {
 
   override protected val dim: Int = gbmLoss.dim
@@ -73,198 +73,6 @@ class GBMLossAggregator(gbmLoss: GBMClassificationLoss)(bcCoefficients: Broadcas
       i += 1
     }
     this
-  }
-
-}
-
-object GBMLineSearch {
-
-  def scalarFunctionFromSearchDirection(
-      f: DiffFunction[RDD[Double]],
-      x: RDD[Double],
-      direction: RDD[Double]): DiffFunction[Double] with Serializable =
-    new DiffFunction[Double] with Serializable {
-
-      override def valueAt(alpha: Double): Double = {
-        val newX = x.zip(direction).map { case (x, d) => x + alpha * d }
-        f.valueAt(newX)
-      }
-
-      override def gradientAt(alpha: Double): Double = {
-        val newX = x.zip(direction).map { case (x, d) => x + alpha * d }
-        f.gradientAt(newX).zip(direction).map { case (g, d) => g * d }.mean
-      }
-
-      def calculate(alpha: Double): (Double, Double) = {
-        val newX = x.zip(direction).map { case (x, d) => x + alpha * d }
-        val (ff, grad) = f.calculate(newX)
-        (ff, grad.zip(direction).map { case (g, d) => g * d }.mean)
-      }
-    }
-
-  def functionFromSearchDirection(
-      f: DiffFunction[RDD[Array[Double]]],
-      x: RDD[Array[Double]],
-      direction: RDD[Array[Double]],
-      dim: Int): DiffFunction[Array[Double]] with Serializable =
-    new DiffFunction[Array[Double]] with Serializable {
-
-      override def valueAt(alpha: Array[Double]): Double = {
-        val newX =
-          x.zip(direction).map {
-            case (x, d) => {
-              val res = Array.ofDim[Double](dim)
-              var i = 0
-              while (i < dim) {
-                res(i) = x(i) + alpha(i) * d(i)
-                i += 1
-              }
-              res
-            }
-          }
-        f.valueAt(newX)
-      }
-
-      override def gradientAt(alpha: Array[Double]): Array[Double] = {
-        val newX =
-          x.zip(direction).map { case (x, d) =>
-            val res = Array.ofDim[Double](dim)
-            var i = 0
-            while (i < dim) {
-              res(i) = x(i) + alpha(i) * d(i)
-              i += 1
-            }
-            res
-          }
-        val (sumGrads, sumWeights) = f
-          .gradientAt(newX)
-          .zip(direction)
-          .treeAggregate((Array.fill(dim)(0.0), 0))(
-            { case ((acc, sum), (g, d)) =>
-              var i = 0
-              while (i < dim) {
-                acc(i) += g(i) * d(i)
-                i += 1
-              }
-              (acc, sum + 1)
-            },
-            { case ((acc1, sum1), (acc2, sum2)) =>
-              BLAS.getBLAS(dim).daxpy(dim, 1.0, acc2, 1, acc1, 1)
-              (acc1, sum1 + sum2)
-            })
-        BLAS.getBLAS(dim).dscal(dim, 1.0 / sumWeights, sumGrads, 1)
-        sumGrads
-      }
-
-      def calculate(alpha: Array[Double]): (Double, Array[Double]) = {
-        val newX = x.zip(direction).map { case (x, d) =>
-          val res = Array.ofDim[Double](dim)
-          var i = 0
-          while (i < dim) {
-            res(i) = x(i) + alpha(i) * d(i)
-            i += 1
-          }
-          res
-        }
-        val (ff, grad) = f.calculate(newX)
-        val (sumGrads, sumWeights) = grad
-          .zip(direction)
-          .treeAggregate((Array.fill(dim)(0.0), 0))(
-            { case ((acc, sum), (g, d)) =>
-              var i = 0
-              while (i < dim) {
-                acc(i) += g(i) * d(i)
-                i += 1
-              }
-              (acc, sum + 1)
-            },
-            { case ((acc1, sum1), (acc2, sum2)) =>
-              BLAS.getBLAS(dim).daxpy(dim, 1.0, acc2, 1, acc1, 1)
-              (acc1, sum1 + sum2)
-            })
-        BLAS.getBLAS(dim).dscal(dim, 1.0 / sumWeights, sumGrads, 1)
-        (ff, sumGrads)
-      }
-    }
-
-}
-
-class GBMDiffFunction(gbmLoss: GBMLoss, instances: RDD[Instance], aggregationDepth: Int = 2)
-    extends DiffFunction[RDD[Array[Double]]]
-    with Serializable {
-
-  override def valueAt(x: RDD[Array[Double]]): Double = {
-    val (sumLosses, sumWeights) = instances
-      .zip(x)
-      .treeAggregate((0.0, 0.0))(
-        { case ((l, sw), (instance, x)) =>
-          (l + gbmLoss.loss(gbmLoss.encodeLabel(instance.label), x), sw + instance.weight)
-        },
-        { case ((l1, s1), (l2, s2)) => (l1 + l2, s1 + s2) },
-        aggregationDepth)
-    sumLosses / sumWeights
-  }
-
-  override def gradientAt(x: RDD[Array[Double]]): RDD[Array[Double]] = {
-    instances.zip(x).map { case (instance, x) =>
-      gbmLoss.gradient(gbmLoss.encodeLabel(instance.label), x)
-    }
-  }
-
-  override def calculate(x: RDD[Array[Double]]): (Double, RDD[Array[Double]]) = {
-    val lossGradWeight = instances.zip(x).map { case (instance, x) =>
-      (
-        gbmLoss.loss(gbmLoss.encodeLabel(instance.label), x),
-        gbmLoss.gradient(gbmLoss.encodeLabel(instance.label), x),
-        instance.weight)
-    }
-    val (sumLosses, sumWeights) = lossGradWeight.treeAggregate((0.0, 0.0))(
-      { case ((sl, sw), (l, g, w)) =>
-        (sl + l, sw + w)
-      },
-      { case ((l1, s1), (l2, s2)) => (l1 + l2, s1 + s2) },
-      aggregationDepth)
-    (sumLosses / sumWeights, lossGradWeight.map(_._2))
-  }
-
-}
-
-class GBMScalarDiffFunction(
-    gbmLoss: GBMScalarLoss,
-    instances: RDD[Instance],
-    aggregationDepth: Int = 2)
-    extends DiffFunction[RDD[Double]]
-    with Serializable {
-
-  override def valueAt(x: RDD[Double]): Double = {
-    val (sumLosses, sumWeights) = instances
-      .zip(x)
-      .treeAggregate((0.0, 0.0))(
-        { case ((l, sw), (instance, x)) =>
-          (l + gbmLoss.loss(instance.label, x), sw + instance.weight)
-        },
-        { case ((l1, s1), (l2, s2)) => (l1 + l2, s1 + s2) },
-        aggregationDepth)
-    sumLosses / sumWeights
-  }
-
-  override def gradientAt(x: RDD[Double]): RDD[Double] = {
-    instances.zip(x).map { case (instance, x) =>
-      gbmLoss.gradient(instance.label, x)
-    }
-  }
-
-  override def calculate(x: RDD[Double]): (Double, RDD[Double]) = {
-    val lossGradWeight = instances.zip(x).map { case (instance, x) =>
-      (gbmLoss.loss(instance.label, x), gbmLoss.gradient(instance.label, x), instance.weight)
-    }
-    val (sumLosses, sumWeights) = lossGradWeight.treeAggregate((0.0, 0.0))(
-      { case ((sl, sw), (l, g, w)) =>
-        (sl + l, sw + w)
-      },
-      { case ((l1, s1), (l2, s2)) => (l1 + l2, s1 + s2) },
-      aggregationDepth)
-    (sumLosses / sumWeights, lossGradWeight.map(_._2))
   }
 
 }
@@ -316,7 +124,8 @@ trait GBMScalarLoss extends GBMLoss {
 }
 
 trait GBMRegressionLoss extends GBMScalarLoss {
-  def encodeLabel(label: Double): Array[Double] = Array(label)
+  override def encodeLabel(label: Double): Array[Double] = Array(label)
+
 }
 
 case object SquaredLoss extends GBMRegressionLoss with HasScalarHessian {

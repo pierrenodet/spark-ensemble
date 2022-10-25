@@ -16,6 +16,8 @@
 
 package org.apache.spark.ml.regression
 
+import breeze.linalg.{DenseVector => BDV}
+import breeze.optimize.CachedDiffFunction
 import org.apache.commons.math3.optim.MaxEval
 import org.apache.commons.math3.optim.MaxIter
 import org.apache.commons.math3.optim.nonlinear.scalar.GoalType
@@ -32,6 +34,7 @@ import org.apache.spark.ml.ensemble.EnsembleRegressorType
 import org.apache.spark.ml.ensemble.HasBaseLearner
 import org.apache.spark.ml.ensemble.Utils
 import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.optim.loss.RDDLossFunction
 import org.apache.spark.ml.param.DoubleParam
 import org.apache.spark.ml.param.Param
 import org.apache.spark.ml.param.ParamMap
@@ -119,7 +122,7 @@ private[ml] object GBMRegressorParams {
   final val supportedInitStrategy: Array[String] =
     Array("constant", "zero", "base").map(_.toLowerCase(Locale.ROOT))
 
-  def loss(loss: String, alpha: Double): GBMScalarLoss =
+  def loss(loss: String, alpha: Double): GBMRegressionLoss =
     loss match {
       case "squared" => SquaredLoss
       case "absolute" => AbsoluteLoss
@@ -394,20 +397,20 @@ class GBMRegressor(override val uid: String)
 
         val solution = $(optimizedWeights) match {
           case true =>
-            val instances = subbag.map(_._1)
-            val predictions = subbag.map(_._2)
-            val directions = subbag
-              .map { case (instance, _) => model.predict(instance.features) }
-              .persist(StorageLevel.MEMORY_AND_DISK)
-            val gbmDiffFunction =
-              new GBMScalarDiffFunction(gbmLoss(quantile), instances, $(aggregationDepth))
-            val gbmLineSearch =
-              GBMLineSearch.scalarFunctionFromSearchDirection(
-                gbmDiffFunction,
-                predictions,
-                directions)
-            val objective = new UnivariateObjectiveFunction(x => gbmLineSearch(x));
-            val searchInterval = new SearchInterval(0, 10, 1)
+            val instances = subbag.map { case (instance, prediction) =>
+              GBMLossInstance(
+                gbmLoss(quantile).encodeLabel(instance.label),
+                instance.weight,
+                Array(prediction),
+                Array(model.predict(instance.features)))
+            }
+            instances.persist(StorageLevel.MEMORY_AND_DISK)
+            val getAggregatorFunc = new GBMLossAggregator(gbmLoss(quantile))(_)
+            val costFun =
+              new RDDLossFunction(instances, getAggregatorFunc, None, $(aggregationDepth))
+            val cachedFun = new CachedDiffFunction(costFun)
+            val objective = new UnivariateObjectiveFunction(x => cachedFun(BDV[Double](x)));
+            val searchInterval = new SearchInterval(0, 100, 1)
             val alpha = optimizer
               .optimize(
                 objective,
@@ -416,7 +419,7 @@ class GBMRegressor(override val uid: String)
                 new MaxIter($(maxIter)),
                 new MaxEval($(maxIter)))
               .getPoint()
-            directions.unpersist()
+            instances.unpersist()
             alpha
           case false => 1.0
         }

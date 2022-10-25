@@ -16,11 +16,12 @@
 
 package org.apache.spark.ml.boosting
 
+import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.DiffFunction
+import breeze.optimize.GradientTester
 import breeze.util.SerializableLogging
 import org.apache.spark._
-import org.apache.spark.ml.feature.Instance
-import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.optim.loss.RDDLossFunction
 import org.apache.spark.mllib.random.RandomRDDs
 import org.apache.spark.sql._
 import org.scalacheck.Gen
@@ -108,13 +109,18 @@ class GBMLossSuite extends AnyFunSuite with BeforeAndAfterAll with ScalaCheckPro
     } yield (loss)
 
     forAll(gen) { case gbmLoss =>
-      val instances = RandomRDDs.normalRDD(sc, 1000).map(i => Instance(i, 1.0, Vectors.zeros(1)))
+      val labels = RandomRDDs.normalRDD(sc, 1000)
       val predictions = RandomRDDs.normalRDD(sc, 1000)
-      val directions = RandomRDDs.normalRDD(sc, 1000)
-      val f = new GBMScalarDiffFunction(gbmLoss, instances)
-      val ff = GBMLineSearch.scalarFunctionFromSearchDirection(f, predictions, directions)
-      val approx =
-        assert(GradientDoubleTesting.test(ff, 1.0) < 1e-4)
+      val gbmInstances = labels.zip(predictions).map { case (label, prediciton) =>
+        GBMLossInstance(gbmLoss.encodeLabel(label), 1.0, Array(0.0), Array(prediciton))
+      }
+      val getAggregatorFunc = new GBMLossAggregator(gbmLoss)(_)
+
+      val x = BDV[Double](1)
+      val costFun =
+        new RDDLossFunction(gbmInstances, getAggregatorFunc, None)
+      assert(GradientTester.test[Int, BDV[Double]](costFun, x).apply(0) < 1e-6)
     }
+
   }
 }
