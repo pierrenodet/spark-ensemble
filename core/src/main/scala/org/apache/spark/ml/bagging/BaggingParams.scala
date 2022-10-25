@@ -32,6 +32,6 @@ private[ml] trait BaggingParams[L <: EnsemblePredictorType]
     with HasBaseLearner[L]
     with HasSubBag {
 
-  setDefault(numBaseLearners -> 20)
+  setDefault(numBaseLearners -> 10)
 
 }

@@ -49,7 +49,7 @@ libraryDependencies += "com.github.pierrenodet" %% "spark-ensemble" % "@VERSION@
 ```maven-pom
 <dependency>
     <groupId>com.github.pierrenodet</groupId>
-    <artifactId>spark-ensemble_2.12</artifactId>
+    <artifactId>spark-ensemble_2.13</artifactId>
     <version>@VERSION@</version>
 </dependency>
 ```

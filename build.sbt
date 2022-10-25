@@ -89,8 +89,8 @@ lazy val docs = project
     cleanFiles += (ScalaUnidoc / unidoc / target).value,
     docusaurusCreateSite := docusaurusCreateSite.dependsOn(Compile / unidoc).value,
     docusaurusPublishGhpages := docusaurusPublishGhpages.dependsOn(Compile / unidoc).value,
-    githubWorkflowArtifactUpload := false)
-  .settings(libraryDependencies ++= Seq(
-    "org.apache.spark" %% "spark-core" % sparkVersion % Provided,
-    "org.apache.spark" %% "spark-sql" % sparkVersion % Provided,
-    "org.apache.spark" %% "spark-mllib" % sparkVersion % Provided))
+    githubWorkflowArtifactUpload := false,
+    libraryDependencies ++= Seq(
+      "org.apache.spark" %% "spark-core" % sparkVersion % Provided,
+      "org.apache.spark" %% "spark-sql" % sparkVersion % Provided,
+      "org.apache.spark" %% "spark-mllib" % sparkVersion % Provided))

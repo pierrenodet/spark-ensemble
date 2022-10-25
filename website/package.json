@@ -14,8 +14,8 @@
     "@docusaurus/preset-classic": "2.1.0",
     "classnames": "2.3.1",
     "react": "^16.8.4",
-    "react-markdown": "^8.0.3",
-    "react-dom": "^16.8.4"
+    "react-dom": "^16.8.4",
+    "react-markdown": "^8.0.3"
   },
   "browserslist": {
     "production": [

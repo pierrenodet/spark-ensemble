@@ -27,21 +27,22 @@ new GBMRegressor()
         .setBaseLearner(new DecisionTreeRegressor()) //Base learner used by the meta-estimator.
         .setNumBaseLearners(10) //Number of base learners.
         .setLearningRate(0.1) //Shrinkage parameter.
-        .setSampleRatio(0.8) //Ratio sampling of exemples.
+        .setSubsampleRatio(0.8) //Ratio sampling of exemples.
         .setReplacement(true) //Exemples drawn with replacement or not.
         .setSubspaceRatio(0.8) //Ratio sampling of features.
         .setOptimizedWeights(true) //Line search the best step size or use 1.0 instead.
         .setLoss("squared") //Loss function used for residuals and optimized step size.
         .setAlpha(0.5) //Extra parameter for certain loss functions as quantile or huber.
         .setValidationIndicatorCol("val") //Column name that contains true or false for the early stop data set.
-        .setTol(1E-3) //Tolerance for optimized step size and gain in loss on early stop set.
-        .setNumRound(8) //Number of rounds to wait for the loss on early stop set to decrease.
+        .setValidationTol(1E-2) //Tolerance for gain in loss on early stop set.
+        .setTol(1E-3) //Tolerance for optimized step size.
+        .setNumRounds(8) //Number of rounds to wait for the loss on early stop set to decrease.
 
 new GBMClassifier()
         .setBaseLearner(new DecisionTreeRegressor()) //Base learner used by the meta-estimator.
         .setNumBaseLearners(10) //Number of base learners.
         .setLearningRate(0.1) //Shrinkage parameter.
-        .setSampleRatio(0.8) //Ratio sampling of exemples.
+        .setSubsampleRatio(0.8) //Ratio sampling of exemples.
         .setReplacement(true) //Exemples drawn with replacement or not.
         .setSubspaceRatio(0.8) //Ratio sampling of features.
         .setOptimizedWeights(true) //Line search the best step size or use 1.0 instead.
@@ -50,7 +51,6 @@ new GBMClassifier()
         .setTol(1E-3) //Tolerance for optimized step size and gain in loss on early stop set.
         .setNumRound(8) //Number of rounds to wait for the loss on early stop set to decrease.
         .setParallelism(4) //Number of base learners trained at the same time. Should be at most the number of classes.
-        .setInstanceTrimmingRatio(1.0) //Quantile of highest instance weights kept each round.
 ```
 
 ## References

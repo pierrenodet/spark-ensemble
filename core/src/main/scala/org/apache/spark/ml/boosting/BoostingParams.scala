@@ -31,7 +31,7 @@ private[ml] trait BoostingParams[L <: EnsemblePredictorType]
     with HasCheckpointInterval
     with HasAggregationDepth {
 
-  setDefault(numBaseLearners -> 20)
+  setDefault(numBaseLearners -> 10)
   setDefault(checkpointInterval -> 10)
 
 }
