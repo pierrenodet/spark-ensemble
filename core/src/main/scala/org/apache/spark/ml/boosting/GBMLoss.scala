@@ -16,16 +16,14 @@
 
 package org.apache.spark.ml.boosting
 
-import breeze.optimize.DiffFunction
-import org.apache.spark.ml.feature.Instance
-import org.apache.spark.ml.impl.Utils.{softmax, log1pExp}
+import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.ml.impl.Utils.log1pExp
+import org.apache.spark.ml.impl.Utils.softmax
+import org.apache.spark.ml.linalg.BLAS
+import org.apache.spark.ml.linalg.DenseVector
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.linalg.Vectors
-import org.apache.spark.rdd.RDD
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.optim.aggregator.DifferentiableLossAggregator
-import org.apache.spark.ml.linalg.DenseVector
-import org.apache.spark.ml.linalg.BLAS
 
 private[spark] case class GBMLossInstance(
     label: Array[Double],
