@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.dummy
+package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.SparkSession

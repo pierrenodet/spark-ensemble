@@ -5,26 +5,30 @@ title: Boosting
 
 The old Boosting, à la papa, from Freund and Schapire [[1](#references)].
 
-For classification, SAMME (Multi-class AdaBoost) [[2](#references)] from Ji Zhu is implemented.
+For classification, SAMME (Multi-class AdaBoost) and SAMME.R [[2](#references)] from Ji Zhu are implemented.
 
 For regression, R2 (Improving Regressors using Boosting Techniques) [[3](#references)] from H. Drucker has been chosen.
 
-For convenience, a N Round early stop is available.
+`BoostingRegressionModel` proposes two different voting strategies to aggregate predictions from base models, one using the weighted median as described in [[3](#references)], the other one using the weighted mean.
 
 ## Parameters
 
-The parameters available for Boosting are related to early stop and the loss function for weight computation.
+The parameters available for Boosting are related to the loss function and the algorithm for weight computation.
 
 ```scala
 import org.apache.spark.ml.classification.{BoostingClassifier, DecisionTreeClassifier}
-        
+import org.apache.spark.ml.regression.{BoostingRegressor, DecisionTreeRegressor}
+
 new BoostingClassifier()
         .setBaseLearner(new DecisionTreeClassifier()) //Base learner used by the meta-estimator.
         .setNumBaseLearners(10) //Number of base learners.
-        .setLoss("exponential") //Loss function used for weight computation.
-        .setValidationIndicatorCol("val") //Column name that contains true or false for the early stop data set.
-        .setTol(1E-3) //Tolerance for optimized step size and gain in loss on early stop set.
-        .setNumRound(8) //Number of rounds to wait for the loss on early stop set to decrease.               
+        .setAlgorithm("real") //SAMME or SAMME.R algorithm.      
+
+new BoostingRegressor()
+        .setBaseLearner(new DecisionTreeClassifier()) //Base learner used by the meta-estimator.
+        .setNumBaseLearners(10) //Number of base learners.
+        .setLoss("squared") //Loss function.    
+        .setVotingStrategy("median") //Voting strategy.         
 ```
 
 ## References

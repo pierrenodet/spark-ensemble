@@ -3,13 +3,13 @@ id: overview
 title: Overview
 ---
 
-## Why ?
+## Why?
 
-Want to switch Decision Trees to Neural Net in Random Forest to make avNNet ?
+Want to switch Decision Trees to Neural Net in Random Forest to make avNNet?
 
-There is no curse in elvish, entish or the tongues of men for this treachery.
+There is no curse in elvish, entish, or the tongues of men for this treachery.
 
-But it's easy now !
+But it's easy now!
 
 ```scala
 val randomForest = new BaggingClassifier()
@@ -34,7 +34,7 @@ Here is the current list :
  
 They all work with Multiclass Classification and Regression.
 
-## Ready to Install ?
+## Ready to Install?
 
 Download the dependency from Maven Central
 

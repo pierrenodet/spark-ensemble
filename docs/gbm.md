@@ -3,20 +3,21 @@ id: gbm
 title: GBM
 ---
 
-God Jerome H. Friedman enlightened mankind with GBM (Gradient Boosting Machines) in the beginning of the third millennium.
+God Jerome H. Friedman enlightened humankind with GBM (Gradient Boosting Machines) at the beginning of the third millennium.
 
-The first of his ten commandments was named : Greedy Function Approximation: A Gradient Boosting Machine [[1](#references)], introducing a meta algorithm that was aimed to do gradient descent in function space. In the end you were kinda doing it in error space, but the heuristic was god sent.
+The first of his ten commandments was named: Greedy Function Approximation: A Gradient Boosting Machine [[1](#references)], introducing a meta-algorithm that was aimed to do gradient descent in function space. In the end, you are kinda doing it in error space, but the heuristic was god sent.
 
-The second commandment was : Stochastic Gradient Boosting [[2](#references)] introducing randomness in each iteration by using SubBags.
+The second commandment was: Stochastic Gradient Boosting [[2](#references)], introducing randomness in each iteration by using SubBags.
 
-Beware of this evil trick from Satan : GBM only works with Regressors as base learners.
+Beware of this evil trick from Satan: GBM only works with Regressors as base learners.
 
 PS : It works for multi-class Classification.
-PPS : Early stop is implemented with a N Round variant.
+PPS : Early-stop is implemented with an N-Round variant.
+PPPS : Newton Boosting is available for losses that admit a non-constant hessian.
 
 ## Parameters
 
-The parameters available for GBM are related to the base framework, the stochastic version and early stop.
+The parameters available for GBM are related to the base framework, the stochastic version, and the early-stop.
 
 ```scala
 import org.apache.spark.ml.classification.GBMRegressor
@@ -26,31 +27,38 @@ import org.apache.spark.ml.regression.DecisionTreeRegressor
 new GBMRegressor()
         .setBaseLearner(new DecisionTreeRegressor()) //Base learner used by the meta-estimator.
         .setNumBaseLearners(10) //Number of base learners.
+        .setInitStrategy("base") //Strategy for the initialization of predictions.
         .setLearningRate(0.1) //Shrinkage parameter.
-        .setSubsampleRatio(0.8) //Ratio sampling of exemples.
+        .setSubsampleRatio(0.8) //Ratio sampling of examples.
         .setReplacement(true) //Exemples drawn with replacement or not.
         .setSubspaceRatio(0.8) //Ratio sampling of features.
-        .setOptimizedWeights(true) //Line search the best step size or use 1.0 instead.
         .setLoss("squared") //Loss function used for residuals and optimized step size.
-        .setAlpha(0.5) //Extra parameter for certain loss functions as quantile or huber.
+        .setAlpha(0.5) //Quantile parameter for quantile or huber losses.
+        .setUpdates("newton") //Newton or Gradient boosting.
+        .setOptimizedWeights(true) //Line search the best step size or use 1.0 instead.
+        .setMaxIter(100) //Optimizer maximum number of iterations for optimized step size.
+        .setTol(1E-3) //Optimizer tolerance for optimized step size.
         .setValidationIndicatorCol("val") //Column name that contains true or false for the early stop data set.
         .setValidationTol(1E-2) //Tolerance for gain in loss on early stop set.
-        .setTol(1E-3) //Tolerance for optimized step size.
         .setNumRounds(8) //Number of rounds to wait for the loss on early stop set to decrease.
 
 new GBMClassifier()
         .setBaseLearner(new DecisionTreeRegressor()) //Base learner used by the meta-estimator.
         .setNumBaseLearners(10) //Number of base learners.
+        .setInitStrategy("prior") //Strategy for the initialization of predictions.
         .setLearningRate(0.1) //Shrinkage parameter.
-        .setSubsampleRatio(0.8) //Ratio sampling of exemples.
+        .setSubsampleRatio(0.8) //Ratio sampling of examples.
         .setReplacement(true) //Exemples drawn with replacement or not.
         .setSubspaceRatio(0.8) //Ratio sampling of features.
+        .setLoss("logloss") //Loss function used for residuals and optimized step size.
+        .setUpdates("newton") //Newton or Gradient boosting.
         .setOptimizedWeights(true) //Line search the best step size or use 1.0 instead.
-        .setLoss("deviance") //Loss function used for residuals and optimized step size.
+        .setMaxIter(100) //Optimizer maximum number of iterations for optimized step size.
+        .setTol(1E-3) //Optimizer tolerance for optimized step size.
         .setValidationIndicatorCol("val") //Column name that contains true or false for the early stop data set.
-        .setTol(1E-3) //Tolerance for optimized step size and gain in loss on early stop set.
-        .setNumRound(8) //Number of rounds to wait for the loss on early stop set to decrease.
-        .setParallelism(4) //Number of base learners trained at the same time. Should be at most the number of classes.
+        .setValidationTol(1E-2) //Tolerance for gain in loss on early stop set.
+        .setNumRounds(8) //Number of rounds to wait for the loss on early stop set to decrease.
+        .setParallelism(4) //Number of base learners trained simultaneously. Should be at most the number of classes.
 ```
 
 ## References

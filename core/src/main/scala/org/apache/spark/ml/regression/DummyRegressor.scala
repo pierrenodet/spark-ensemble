@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.dummy
+package org.apache.spark.ml.regression
 
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.linalg.Vector

@@ -25,8 +25,6 @@ import org.apache.spark.ml.boosting.GBMParams
 import org.apache.spark.ml.boosting._
 import org.apache.spark.ml.classification.ProbabilisticClassificationModel
 import org.apache.spark.ml.classification.ProbabilisticClassifier
-import org.apache.spark.ml.dummy.DummyClassificationModel
-import org.apache.spark.ml.dummy.DummyClassifier
 import org.apache.spark.ml.ensemble.EnsembleClassificationModelType
 import org.apache.spark.ml.ensemble.EnsemblePredictionModelType
 import org.apache.spark.ml.ensemble.EnsembleRegressorType

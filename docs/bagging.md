@@ -7,11 +7,14 @@ Bagging (Bootstrap aggregating) is a meta-algorithm introduced by Breiman [[1](#
 
 The Random Subspace Method is another meta-algorithm proposed by Ho [[2](#references)] that performs the same transformations as Bagging but on the feature space.
 
-Combining this two methods is called SubBag and is designed by Pance Panov and Saso Dzeroski [[3](#references)].
+Combining these two methods is called SubBag and is designed by Pance Panov and Saso Dzeroski [[3](#references)].
 
 Here the `BaggingClassifier` and the `BaggingRegressor` implement the SubBag meta-estimator.
 
-For prediction, `BaggingClassificationModel` uses a majority vote and `BaggingRegressionModel` uses the average.
+For classification, `BaggingClassificationModel` uses a majority vote of the base model predictions.
+It can be either `soft` or `hard`, using the predicted classes or the predicted probabilities of each base model.
+
+For regression, `BaggingRegressionModel` uses the average of the base model predictions.
 
 ## Parameters
 
@@ -19,14 +22,24 @@ The parameters available for Bagging are related to the number of base learners 
 
 ```scala
 import org.apache.spark.ml.classification.{BaggingClassifier, DecisionTreeClassifier}
+import org.apache.spark.ml.regression.{BaggingRegressor, DecisionTreeRegressor}
 
 new BaggingClassifier()
         .setBaseLearner(new DecisionTreeClassifier()) //Base learner used by the meta-estimator.
         .setNumBaseLearners(10) //Number of base learners.
-        .setSubsampleRatio(0.8) //Ratio sampling of exemples.
+        .setSubsampleRatio(0.8) //Ratio sampling of examples.
         .setReplacement(true) //Exemples drawn with replacement or not.
         .setSubspaceRatio(0.8) //Ratio sampling of features.
-        .setParallelism(4) //Number of base learners trained at the same time.
+        .setVotingStrategy("soft") //Soft or Hard majority vote.
+        .setParallelism(4) //Number of base learners trained simultaneously.
+
+new BaggingRegressor()
+        .setBaseLearner(new DecisionTreeRegressor()) //Base learner used by the meta-estimator.
+        .setNumBaseLearners(10) //Number of base learners.
+        .setSubsampleRatio(0.8) //Sampling ratio of examples.
+        .setReplacement(true) //Exemples drawn with replacement or not.
+        .setSubspaceRatio(0.8) //Sampling ratio of features.
+        .setParallelism(4) //Number of base learners trained simultaneously.
 ```
 
 ## References
