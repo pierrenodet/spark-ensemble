@@ -75,7 +75,7 @@ class GBMClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
 
     val mce = new MulticlassClassificationEvaluator().setMetricName("accuracy")
 
-    val splits = data.randomSplit(Array(0.8, 0.2), 0L)
+    val splits = data.randomSplit(Array(0.7, 0.3), 0L)
     val (train, test) = (splits(0), splits(1))
 
     val dtcModel = spark.time(dtc.fit(train))
@@ -125,7 +125,7 @@ class GBMClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
 
     val mce = new MulticlassClassificationEvaluator().setMetricName("accuracy")
 
-    val splits = data.randomSplit(Array(0.8, 0.2), 0L)
+    val splits = data.randomSplit(Array(0.8, 0.3), 0L)
     val (train, test) = (splits(0), splits(1))
 
     val dtcModel = spark.time(dtc.fit(train))
@@ -164,7 +164,7 @@ class GBMClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
       .setParallelism(26)
     val mce = new MulticlassClassificationEvaluator().setMetricName("accuracy")
 
-    val splits = data.randomSplit(Array(0.8, 0.2), 0L)
+    val splits = data.randomSplit(Array(0.7, 0.3), 0L)
     val (train, test) = (splits(0), splits(1))
 
     val gbmcModel = gbmc.fit(train)
@@ -204,7 +204,7 @@ class GBMClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
     val dtr = new DecisionTreeRegressor()
     val gbmrWithVal = new GBMClassifier()
       .setBaseLearner(dtr)
-      .setNumBaseLearners(20)
+      .setNumBaseLearners(10)
       .setLoss("binomial")
       .setUpdates("gradient")
       .setValidationIndicatorCol("validation")
@@ -213,7 +213,7 @@ class GBMClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
 
     val gbmrNoVal = new GBMClassifier()
       .setBaseLearner(dtr)
-      .setNumBaseLearners(20)
+      .setNumBaseLearners(10)
       .setLoss("binomial")
       .setUpdates("gradient")
       .setParallelism(26)
@@ -256,13 +256,13 @@ class GBMClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
         .cache()
     data.count()
 
-    val dtr = new DecisionTreeRegressor()
+    val dtr = new DecisionTreeRegressor().setMaxDepth(3)
     val gbmc = new GBMClassifier()
       .setBaseLearner(dtr)
       .setNumBaseLearners(2)
       .setParallelism(26)
 
-    val splits = data.randomSplit(Array(0.8, 0.2), 0L)
+    val splits = data.randomSplit(Array(0.7, 0.3), 0L)
     val (train, test) = (splits(0), splits(1))
 
     val gbmcModel = gbmc.fit(train)
@@ -287,7 +287,7 @@ class GBMClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
       .setLoss("exponential")
       .setNumBaseLearners(2)
 
-    val splits = data.randomSplit(Array(0.8, 0.2), 0L)
+    val splits = data.randomSplit(Array(0.7, 0.3), 0L)
     val (train, test) = (splits(0), splits(1))
 
     val gbmcModel = gbmc.fit(train)

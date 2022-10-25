@@ -17,7 +17,6 @@
 package org.apache.spark.ml.ensemble
 
 import org.apache.spark._
-import org.apache.spark.ml.ensemble.HasSubBag
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.Params
 import org.apache.spark.sql._
@@ -69,7 +68,7 @@ class HasSubBagSuite
     forAll(gen) { case (subspaceRatio, numFeatures, seed) =>
       assert(
         numFeatures * subspaceRatio ===
-          subspace(subspaceRatio, numFeatures, seed).size.toDouble +- 2)
+          subspace(subspaceRatio, numFeatures, seed).size.toDouble +- 2.5)
     }
 
   }

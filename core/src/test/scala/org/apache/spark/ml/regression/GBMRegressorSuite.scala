@@ -89,12 +89,12 @@ class GBMRegressorSuite extends AnyFunSuite with BeforeAndAfterAll with ScalaChe
     val dtr = new DecisionTreeRegressor()
     val gbmrWithVal = new GBMRegressor()
       .setBaseLearner(dtr)
-      .setNumBaseLearners(100)
+      .setNumBaseLearners(20)
       .setValidationIndicatorCol("validation")
       .setNumRounds(1)
     val gbmrNoVal = new GBMRegressor()
       .setBaseLearner(dtr)
-      .setNumBaseLearners(100)
+      .setNumBaseLearners(20)
 
     val re = new RegressionEvaluator().setMetricName("mse")
 
@@ -118,6 +118,8 @@ class GBMRegressorSuite extends AnyFunSuite with BeforeAndAfterAll with ScalaChe
       .sliding(2)
       .collect { case (h :: t) => h - t.head < 0.01 * math.max(0.01, t.head) }
       .indexOf(true)
+
+    println(earlyStop)
 
     assert(gbmrWithValModel.numModels == earlyStop)
 

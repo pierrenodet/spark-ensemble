@@ -46,43 +46,6 @@ class StackingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
     spark.stop()
   }
 
-  test("stacking classifier is better than baseline classifier") {
-
-    val data =
-      spark.read
-        .format("libsvm")
-        .load("data/letter/letter.svm")
-        .withColumn("label", col("label") - lit(1))
-        .cache()
-    data.count()
-
-    val dtc = new DecisionTreeClassifier()
-    val boostingc = new BoostingClassifier().setNumBaseLearners(5).setBaseLearner(dtc)
-    val gbmc =
-      new GBMClassifier()
-        .setNumBaseLearners(5)
-        .setBaseLearner(new DecisionTreeRegressor())
-        .setParallelism(26)
-    val lr = new LogisticRegression()
-    val sc = new StackingClassifier()
-      .setBaseLearners(Array(dtc, boostingc, gbmc, lr))
-      .setStacker(lr)
-      .setStackMethod("raw")
-      .setParallelism(4)
-
-    val mce = new MulticlassClassificationEvaluator()
-      .setMetricName("accuracy")
-
-    val splits = data.randomSplit(Array(0.8, 0.2), 0L)
-    val (train, test) = (splits(0), splits(1))
-
-    val lrModel = lr.fit(train)
-    val scModel = sc.fit(train)
-
-    assert(mce.evaluate(lrModel.transform(test)) < mce.evaluate(scModel.transform(test)))
-
-  }
-
   test("stacking classifier is better than the best base classifier") {
 
     val data =

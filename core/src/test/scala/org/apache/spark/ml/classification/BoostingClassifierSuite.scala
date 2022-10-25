@@ -48,34 +48,6 @@ class BoostingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
     spark.stop()
   }
 
-  test("boosting classifier is better than baseline classifier") {
-
-    val data =
-      spark.read
-        .format("libsvm")
-        .load("data/letter/letter.svm")
-        .withColumn("label", col("label") - lit(1))
-        .cache()
-    data.count()
-
-    val dtr = new DecisionTreeClassifier()
-      .setMaxDepth(10)
-    val br = new BoostingClassifier()
-      .setBaseLearner(dtr)
-      .setNumBaseLearners(10)
-
-    val mce = new MulticlassClassificationEvaluator().setMetricName("accuracy")
-
-    val splits = data.randomSplit(Array(0.8, 0.2), 0L)
-    val (train, test) = (splits(0), splits(1))
-
-    val dtrModel = spark.time(dtr.fit(train))
-    val brModel = br.fit(train)
-
-    assert(mce.evaluate(dtrModel.transform(test)) < mce.evaluate(brModel.transform(test)))
-
-  }
-
   test("more base learners improves performance") {
 
     val data =
@@ -90,11 +62,11 @@ class BoostingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
       .setMaxDepth(10)
     val bc = new BoostingClassifier()
       .setBaseLearner(dtc)
-      .setNumBaseLearners(20)
+      .setNumBaseLearners(10)
 
     val mce = new MulticlassClassificationEvaluator().setMetricName("accuracy")
 
-    val splits = data.randomSplit(Array(0.8, 0.2), 0L)
+    val splits = data.randomSplit(Array(0.7, 0.3), 0L)
     val (train, test) = (splits(0), splits(1))
 
     val bcModel = bc.fit(train)
@@ -109,7 +81,7 @@ class BoostingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
           bcModel.models.take(i))
         metrics += mce.evaluate(model.transform(test))
       })
-
+    
     assert(
       metrics.toList
         .sliding(2)
@@ -130,16 +102,16 @@ class BoostingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
     val lr = new DecisionTreeClassifier().setMaxDepth(10)
     val bcr = new BoostingClassifier()
       .setBaseLearner(lr)
-      .setNumBaseLearners(20)
+      .setNumBaseLearners(10)
       .setAlgorithm("real")
     val bcd = new BoostingClassifier()
       .setBaseLearner(lr)
-      .setNumBaseLearners(20)
+      .setNumBaseLearners(10)
       .setAlgorithm("discrete")
 
     val mce = new MulticlassClassificationEvaluator().setMetricName("accuracy")
 
-    val splits = data.randomSplit(Array(0.8, 0.2), 0L)
+    val splits = data.randomSplit(Array(0.7, 0.3), 0L)
     val (train, test) = (splits(0), splits(1))
     train.count()
 
@@ -164,7 +136,7 @@ class BoostingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
       .setBaseLearner(dtc)
       .setNumBaseLearners(5)
 
-    val splits = data.randomSplit(Array(0.8, 0.2), 0L)
+    val splits = data.randomSplit(Array(0.7, 0.3), 0L)
     val (train, test) = (splits(0), splits(1))
 
     val bcModel = bc.fit(train)

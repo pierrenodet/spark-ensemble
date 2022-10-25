@@ -166,7 +166,7 @@ class BaggingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
     val lr = new DecisionTreeClassifier()
     val bc = new BaggingClassifier()
       .setBaseLearner(lr)
-      .setNumBaseLearners(4)
+      .setNumBaseLearners(2)
       .setReplacement(true)
       .setSubsampleRatio(0.4)
       .setParallelism(4)
