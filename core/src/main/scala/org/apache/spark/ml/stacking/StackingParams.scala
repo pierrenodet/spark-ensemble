@@ -19,9 +19,9 @@ import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.ensemble.{HasBaseLearners, HasStacker, EnsemblePredictorType}
 import org.apache.spark.ml.param.shared.{HasParallelism, HasWeightCol}
 
-private[ml] trait StackingParams
+private[ml] trait StackingParams[L <: EnsemblePredictorType]
     extends PredictorParams
     with HasParallelism
     with HasWeightCol
-    with HasStacker
-    with HasBaseLearners[EnsemblePredictorType] {}
+    with HasStacker[L]
+    with HasBaseLearners[L] {}

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.regression
+package org.apache.spark.ml.classification
 
 import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.CachedDiffFunction

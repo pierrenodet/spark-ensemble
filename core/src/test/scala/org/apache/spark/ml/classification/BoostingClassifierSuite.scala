@@ -110,8 +110,6 @@ class BoostingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
         metrics += mce.evaluate(model.transform(test))
       })
 
-    println(metrics)
-
     assert(
       metrics.toList
         .sliding(2)

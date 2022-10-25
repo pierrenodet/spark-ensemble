@@ -21,10 +21,9 @@ import org.apache.spark.SparkContext
 import org.apache.spark.ml.PredictionModel
 import org.apache.spark.ml.Predictor
 import org.apache.spark.ml.ensemble.EnsemblePredictionModelType
-import org.apache.spark.ml.ensemble.EnsemblePredictorType
+import org.apache.spark.ml.ensemble.EnsembleRegressorType
 import org.apache.spark.ml.ensemble.HasBaseLearners
 import org.apache.spark.ml.ensemble.HasStacker
-import org.apache.spark.ml.ensemble.Utils
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.linalg.Vectors
@@ -46,7 +45,7 @@ import org.json4s.jackson.JsonMethods.render
 import scala.concurrent.Future
 import scala.concurrent.duration.Duration
 
-private[ml] trait StackingRegressorParams extends StackingParams {}
+private[ml] trait StackingRegressorParams extends StackingParams[EnsembleRegressorType] {}
 
 private[ml] object StackingRegressorParams {
 
@@ -70,11 +69,11 @@ private[ml] object StackingRegressorParams {
   }
 
   def loadImpl(path: String, sc: SparkContext, expectedClassName: String)
-      : (DefaultParamsReader.Metadata, Array[EnsemblePredictorType], EnsemblePredictorType) = {
+      : (DefaultParamsReader.Metadata, Array[EnsembleRegressorType], EnsembleRegressorType) = {
 
     val metadata = DefaultParamsReader.loadMetadata(path, sc, expectedClassName)
-    val learners = HasBaseLearners.loadImpl(path, sc)
-    val stacker = HasStacker.loadImpl(path, sc)
+    val learners = HasBaseLearners.loadImpl[EnsembleRegressorType](path, sc)
+    val stacker = HasStacker.loadImpl[EnsembleRegressorType](path, sc)
     (metadata, learners, stacker)
 
   }
@@ -86,11 +85,11 @@ class StackingRegressor(override val uid: String)
     with StackingRegressorParams
     with MLWritable {
 
-  def setBaseLearners(value: Array[Predictor[_, _, _]]): this.type =
-    set(baseLearners, value.map(_.asInstanceOf[EnsemblePredictorType]))
+  def setBaseLearners(value: Array[EnsembleRegressorType]): this.type =
+    set(baseLearners, value)
 
-  def setStacker(value: Predictor[_, _, _]): this.type =
-    set(stacker, value.asInstanceOf[EnsemblePredictorType])
+  def setStacker(value: EnsembleRegressorType): this.type =
+    set(stacker, value)
 
   def setParallelism(value: Int): this.type = set(parallelism, value)
 
@@ -162,12 +161,8 @@ class StackingRegressor(override val uid: String)
             point.weight,
             Vectors.dense(models.map(model => model.predict(point.features)))))
 
-      val featuresMetadata =
-        Utils.getFeaturesMetadata(dataset, $(featuresCol))
-
       val predictionsDF = spark
         .createDataFrame(predictions)
-        .withMetadata("features", featuresMetadata)
 
       val stack =
         fitBaseLearner($(stacker), "label", "features", getPredictionCol, Some("weight"))(
@@ -207,7 +202,7 @@ object StackingRegressor extends MLReadable[StackingRegressor] {
       val (metadata, learners, stacker) = StackingRegressorParams.loadImpl(path, sc, className)
       val sr = new StackingRegressor(metadata.uid)
       metadata.getAndSetParams(sr)
-      sr.setBaseLearners(learners.map(_.asInstanceOf[Predictor[Vector, _, _]]))
+      sr.setBaseLearners(learners)
       sr.setStacker(stacker)
     }
   }

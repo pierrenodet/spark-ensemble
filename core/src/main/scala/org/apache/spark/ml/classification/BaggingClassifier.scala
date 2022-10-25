@@ -254,12 +254,12 @@ class BaggingClassificationModel(
       models: Array[EnsemblePredictionModelType]) =
     this(Identifiable.randomUID("BaggingClassificationModel"), numClasses, subspaces, models)
 
-  val numBaseModels: Int = models.length
+  val numModels: Int = models.length
 
   override def predictRaw(features: Vector): Vector = {
     val rawPredictions = Vectors.zeros(numClasses)
     var i = 0
-    while (i < numBaseModels) {
+    while (i < numModels) {
       val model = models(i)
       val subspace = subspaces(i)
       val rawPrediction = model match {
@@ -282,7 +282,7 @@ class BaggingClassificationModel(
   }
 
   override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
-    BLAS.scal(1.0 / numBaseModels, rawPrediction); rawPrediction
+    BLAS.scal(1.0 / numModels.toDouble, rawPrediction); rawPrediction
   }
 
   override def copy(extra: ParamMap): BaggingClassificationModel = {
@@ -309,7 +309,7 @@ object BaggingClassificationModel extends MLReadable[BaggingClassificationModel]
 
     override protected def saveImpl(path: String): Unit = {
       val extraJson =
-        ("numClasses" -> instance.numClasses) ~ ("numBaseModels" -> instance.numBaseModels)
+        ("numClasses" -> instance.numClasses) ~ ("numModels" -> instance.numModels)
       BaggingClassifierParams.saveImpl(instance, path, sc, Some(extraJson))
       instance.models.map(_.asInstanceOf[MLWritable]).zipWithIndex.foreach { case (model, idx) =>
         val modelPath = new Path(path, s"model-$idx").toString
@@ -331,7 +331,7 @@ object BaggingClassificationModel extends MLReadable[BaggingClassificationModel]
     override def load(path: String): BaggingClassificationModel = {
       implicit val format: DefaultFormats = DefaultFormats
       val (metadata, baseLearner) = BaggingClassifierParams.loadImpl(path, sc, className)
-      val numModels = (metadata.metadata \ "numBaseModels").extract[Int]
+      val numModels = (metadata.metadata \ "numModels").extract[Int]
       val numClasses = (metadata.metadata \ "numClasses").extract[Int]
       val models = (0 until numModels).toArray.map { idx =>
         val modelPath = new Path(path, s"model-$idx").toString

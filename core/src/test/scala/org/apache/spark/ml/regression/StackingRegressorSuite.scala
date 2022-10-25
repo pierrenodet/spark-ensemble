@@ -14,79 +14,128 @@
  * limitations under the License.
  */
 
-// package org.apache.spark.ml.regression
+package org.apache.spark.ml.regression
 
-// import com.holdenkarau.spark.testing.DatasetSuiteBase
-// import org.apache.spark.ml.evaluation.RegressionEvaluator
-// import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
-// import org.scalatest.FunSuite
+import org.apache.spark._
+import org.apache.spark.ml.evaluation.RegressionEvaluator
+import org.apache.spark.ml.regression.BoostingRegressor
+import org.apache.spark.ml.regression.DecisionTreeRegressor
+import org.apache.spark.ml.regression.GBMRegressor
+import org.apache.spark.ml.regression.LinearRegression
+import org.apache.spark.ml.regression.StackingRegressionModel
+import org.apache.spark.sql._
+import org.scalatest.BeforeAndAfterAll
+import org.scalatest.funsuite.AnyFunSuite
 
-// class StackingRegressorSuite extends FunSuite with DatasetSuiteBase {
+import scala.collection.mutable.ListBuffer
 
-//   test("benchmark") {
+class StackingRegressorSuite extends AnyFunSuite with BeforeAndAfterAll {
 
-//     val raw = spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm")
+  var spark: SparkSession = _
 
-//     val sr = new StackingRegressor()
-//       .setStacker(new DecisionTreeRegressor())
-//       .setBaseLearners(Array(new DecisionTreeRegressor(), new RandomForestRegressor()))
-//       .setParallelism(2)
-//     val rf = new RandomForestRegressor()
+  override def beforeAll() {
 
-//     val re = new RegressionEvaluator()
-//       .setLabelCol("label")
-//       .setPredictionCol("prediction")
-//       .setMetricName("rmse")
+    spark = SparkSession
+      .builder()
+      .config(
+        new SparkConf()
+          .setMaster("local[*]")
+          .setAppName("example"))
+      .getOrCreate()
+    spark.sparkContext.setLogLevel("ERROR")
 
-//     val data = raw
-//     data.cache().first()
+  }
 
-//     time {
-//       val srParamGrid = new ParamGridBuilder()
-//         .build()
+  override def afterAll() {
+    spark.stop()
+  }
 
-//       val srCV = new CrossValidator()
-//         .setEstimator(sr)
-//         .setEvaluator(re)
-//         .setEstimatorParamMaps(srParamGrid)
-//         .setNumFolds(3)
-//         .setParallelism(4)
+  test("stacking regressor is better than baseline regressors") {
 
-//       val srCVModel = srCV.fit(data)
+    val data =
+      spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm").cache()
+    data.count()
 
-//       println(srCVModel.avgMetrics.min)
+    val dtr = new DecisionTreeRegressor()
+    val boostingr = new BoostingRegressor().setNumBaseLearners(5).setBaseLearner(dtr)
+    val gbmr =
+      new GBMRegressor()
+        .setNumBaseLearners(5)
+        .setBaseLearner(dtr)
+    val lr = new LinearRegression()
+    val sc = new StackingRegressor()
+      .setBaseLearners(Array(dtr, boostingr, gbmr, lr))
+      .setStacker(lr)
 
-//       val bm = srCVModel.bestModel.asInstanceOf[StackingRegressionModel]
-//       bm.write.overwrite().save("/tmp/bonjour")
-//       val loaded = StackingRegressionModel.load("/tmp/bonjour")
-//       assert(re.evaluate(loaded.transform(data)) == re.evaluate(bm.transform(data)))
+    val re = new RegressionEvaluator().setMetricName("rmse")
 
-//     }
 
-//     time {
-//       val paramGrid = new ParamGridBuilder()
-//         .build()
+    val splits = data.randomSplit(Array(0.8, 0.2), 0L)
+    val (train, test) = (splits(0), splits(1))
 
-//       val cv = new CrossValidator()
-//         .setEstimator(rf)
-//         .setEvaluator(re)
-//         .setEstimatorParamMaps(paramGrid)
-//         .setNumFolds(3)
-//         .setParallelism(4)
+    val lrModel = lr.fit(train)
+    val scModel = sc.fit(train)
 
-//       val cvModel = cv.fit(data)
+    assert(re.evaluate(lrModel.transform(test)) > re.evaluate(scModel.transform(test)))
 
-//       println(cvModel.bestModel.asInstanceOf[RandomForestRegressionModel].getSubsamplingRate)
-//       println(cvModel.avgMetrics.min)
-//     }
-//   }
+  }
 
-//   def time[R](block: => R): R = {
-//     val t0 = System.nanoTime()
-//     val result = block // call-by-name
-//     val t1 = System.nanoTime()
-//     println("Elapsed time: " + (t1 - t0) + "ns")
-//     result
-//   }
+  test("stacking regressor is better than the best base regressor") {
 
-// }
+    val data =
+      spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm").cache()
+    data.count()
+
+    val dtr = new DecisionTreeRegressor()
+    val boostingr = new BoostingRegressor().setNumBaseLearners(5).setBaseLearner(dtr)
+    val gbmr =
+      new GBMRegressor()
+        .setNumBaseLearners(5)
+        .setBaseLearner(dtr)
+    val lr = new LinearRegression()
+    val sc = new StackingRegressor()
+      .setBaseLearners(Array(dtr, boostingr, gbmr, lr))
+      .setStacker(lr)
+
+    val re = new RegressionEvaluator().setMetricName("rmse")
+
+    val splits = data.randomSplit(Array(0.8, 0.2), 0L)
+    val (train, test) = (splits(0), splits(1))
+
+    val scModel = sc.fit(train)
+
+    val metric = re.evaluate(scModel.transform(test))
+
+    val metrics = ListBuffer.empty[Double]
+    scModel.models.foreach(model => metrics += re.evaluate(model.transform(test)))
+
+    assert(metrics.min > metric)
+  }
+
+  test("read/write") {
+    val data =
+      spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm").cache()
+    data.count()
+
+    val dtr = new DecisionTreeRegressor()
+    val boostingr = new BoostingRegressor().setNumBaseLearners(5).setBaseLearner(dtr)
+    val gbmr =
+      new GBMRegressor()
+        .setNumBaseLearners(5)
+        .setBaseLearner(dtr)
+    val lr = new LinearRegression()
+    val sc = new StackingRegressor()
+      .setBaseLearners(Array(dtr, boostingr, gbmr, lr))
+      .setStacker(lr)
+
+    val splits = data.randomSplit(Array(0.8, 0.2), 0L)
+    val (train, test) = (splits(0), splits(1))
+
+    val scModel = sc.fit(train)
+    scModel.write.overwrite().save("/tmp/sc")
+    val loaded = StackingRegressionModel.load("/tmp/sc")
+
+    assert(scModel.transform(test).collect() === loaded.transform(test).collect())
+  }
+
+}

@@ -27,6 +27,7 @@ import org.apache.spark.ml.util.DefaultParamsReader
 import org.apache.spark.ml.util.MLWritable
 import org.apache.spark.sql.DataFrame
 import org.json4s.JObject
+import scala.reflect.ClassTag
 
 private[ml] trait HasNumBaseLearners extends Params {
 
@@ -103,7 +104,7 @@ private[ml] object HasBaseLearner {
 
 }
 
-private[ml] trait HasStacker extends Params {
+private[ml] trait HasStacker[L <: EnsemblePredictorType] extends HasBaseLearner[L] with Params {
 
   /**
    * param for the estimator that will be used by the ensemble learner to aggregate results of
@@ -111,21 +112,21 @@ private[ml] trait HasStacker extends Params {
    *
    * @group param
    */
-  val stacker: Param[EnsemblePredictorType] =
-    new Param[EnsemblePredictorType](
+  val stacker: Param[L] =
+    new Param[L](
       this,
       "stacker",
       "stacker that will be used by the ensemble learner to aggregate results of base learner(s)")
 
   /** @group getParam */
-  def getStacker: EnsemblePredictorType = $(stacker)
+  def getStacker: L = $(stacker)
 
 }
 
 private[ml] object HasStacker {
 
   def saveImpl(
-      instance: HasStacker,
+      instance: HasStacker[_],
       path: String,
       sc: SparkContext,
       extraMetadata: Option[JObject] = None): Unit = {
@@ -135,10 +136,10 @@ private[ml] object HasStacker {
 
   }
 
-  def loadImpl(path: String, sc: SparkContext): EnsemblePredictorType = {
+  def loadImpl[L <: EnsemblePredictorType](path: String, sc: SparkContext): L = {
 
     val stackerPath = new Path(path, "stacker").toString
-    DefaultParamsReader.loadParamsInstance[EnsemblePredictorType](stackerPath, sc)
+    DefaultParamsReader.loadParamsInstance[L](stackerPath, sc)
 
   }
 
@@ -153,14 +154,14 @@ private[ml] trait HasBaseLearners[L <: EnsemblePredictorType]
    *
    * @group param
    */
-  val baseLearners: Param[Array[EnsemblePredictorType]] =
-    new Param[Array[EnsemblePredictorType]](
+  val baseLearners: Param[Array[L]] =
+    new Param[Array[L]](
       this,
       "baseLearners",
       "base learners that will be used by the ensemble learner")
 
   /** @group getParam */
-  def getBaseLearners: Array[EnsemblePredictorType] = $(baseLearners)
+  def getBaseLearners: Array[L] = $(baseLearners)
 
 }
 
@@ -180,9 +181,7 @@ private[ml] object HasBaseLearners {
 
   }
 
-  def loadImpl[L <: EnsemblePredictorType](
-      path: String,
-      sc: SparkContext): Array[EnsemblePredictorType] = {
+  def loadImpl[L <: EnsemblePredictorType: ClassTag](path: String, sc: SparkContext): Array[L] = {
 
     val pathFS = new Path(path)
     val fs = pathFS.getFileSystem(sc.hadoopConfiguration)

@@ -19,8 +19,6 @@ import org.apache.spark._
 import org.apache.spark.ml.classification._
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
 import org.apache.spark.ml.regression.DecisionTreeRegressor
-import org.apache.spark.ml.regression.GBMClassificationModel
-import org.apache.spark.ml.regression.GBMClassifier
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.scalatest.BeforeAndAfterAll

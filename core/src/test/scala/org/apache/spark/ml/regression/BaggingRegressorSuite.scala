@@ -99,7 +99,7 @@ class BaggingRegressorSuite extends AnyFunSuite with BeforeAndAfterAll {
     val metrics = ListBuffer.empty[Double]
     brModel.models.foreach(model => metrics += re.evaluate(model.transform(test)))
 
-    assert(metrics.max > metric)
+    assert(metrics.min > metric)
   }
 
   test("read/write") {

@@ -24,10 +24,10 @@ import org.apache.spark.ml.ensemble.EnsemblePredictionModelType
 import org.apache.spark.ml.ensemble.EnsemblePredictorType
 import org.apache.spark.ml.ensemble.HasBaseLearners
 import org.apache.spark.ml.ensemble.HasStacker
-import org.apache.spark.ml.ensemble.Utils
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.param.Param
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.ParamPair
 import org.apache.spark.ml.param.shared.HasWeightCol
@@ -43,12 +43,40 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.parse
 import org.json4s.jackson.JsonMethods.render
 
+import java.util.Locale
 import scala.concurrent.Future
 import scala.concurrent.duration.Duration
 
-private[ml] trait StackingClassifierParams extends StackingParams with ClassifierParams {}
+private[ml] trait StackingClassifierParams
+    extends StackingParams[EnsemblePredictorType]
+    with ClassifierParams {
+
+  /**
+   * Discrete (SAMME) or Real (SAMME.R) boosting algorithm. (case-insensitive) Supported: "class",
+   * "raw", "proba". (default = class)
+   *
+   * @group param
+   */
+  val stackMethod: Param[String] =
+    new Param(
+      this,
+      "stackMethod",
+      "stackMethod, (case-insensitive). Supported options:" + s"${StackingClassifierParams.supportedStackMethod
+          .mkString(",")}",
+      (value: String) =>
+        StackingClassifierParams.supportedStackMethod.contains(value.toLowerCase(Locale.ROOT)))
+
+  /** @group getParam */
+  def getStackMethod: String = $(stackMethod).toLowerCase(Locale.ROOT)
+
+  setDefault(stackMethod -> "class")
+
+}
 
 private[ml] object StackingClassifierParams {
+
+  final val supportedStackMethod: Array[String] =
+    Array("class", "raw", "proba").map(_.toLowerCase(Locale.ROOT))
 
   def saveImpl(
       instance: StackingClassifierParams,
@@ -73,8 +101,8 @@ private[ml] object StackingClassifierParams {
       : (DefaultParamsReader.Metadata, Array[EnsemblePredictorType], EnsemblePredictorType) = {
 
     val metadata = DefaultParamsReader.loadMetadata(path, sc, expectedClassName)
-    val learners = HasBaseLearners.loadImpl(path, sc)
-    val stacker = HasStacker.loadImpl(path, sc)
+    val learners = HasBaseLearners.loadImpl[EnsemblePredictorType](path, sc)
+    val stacker = HasStacker.loadImpl[EnsemblePredictorType](path, sc)
     (metadata, learners, stacker)
 
   }
@@ -86,11 +114,14 @@ class StackingClassifier(override val uid: String)
     with StackingClassifierParams
     with MLWritable {
 
-  def setBaseLearners(value: Array[Predictor[_, _, _]]): this.type =
-    set(baseLearners, value.map(_.asInstanceOf[EnsemblePredictorType]))
+  def setBaseLearners(value: Array[EnsemblePredictorType]): this.type =
+    set(baseLearners, value)
 
-  def setStacker(value: Predictor[_, _, _]): this.type =
-    set(stacker, value.asInstanceOf[EnsemblePredictorType])
+  def setStacker(value: EnsemblePredictorType): this.type =
+    set(stacker, value)
+
+  def setStackMethod(value: String): this.type =
+    set(stackMethod, value)
 
   def setParallelism(value: Int): this.type = set(parallelism, value)
 
@@ -154,21 +185,24 @@ class StackingClassifier(override val uid: String)
 
       val models = futureModels.map(f => ThreadUtils.awaitResult(f, Duration.Inf)).toArray
 
-      val points = extractInstances(df)
+      val instances = extractInstances(df)
 
       val predictions =
-        points.map(point =>
-          Instance(
-            point.label,
-            point.weight,
-            Vectors.dense(models.map(model => model.predict(point.features)))))
-
-      val featuresMetadata =
-        Utils.getFeaturesMetadata(dataset, $(featuresCol))
+        instances.map(instance => {
+          val features = models.flatMap(model =>
+            model match {
+              case model: ProbabilisticClassificationModel[Vector, _]
+                  if (getStackMethod == "proba") =>
+                model.predictProbability(instance.features).toArray
+              case model: ClassificationModel[Vector, _] if (getStackMethod == "raw") =>
+                model.predictRaw(instance.features).toArray
+              case _ => Array(model.predict(instance.features))
+            })
+          Instance(instance.label, instance.weight, Vectors.dense(features))
+        })
 
       val predictionsDF = spark
         .createDataFrame(predictions)
-        .withMetadata("features", featuresMetadata)
 
       val stack =
         fitBaseLearner($(stacker), "label", "features", getPredictionCol, Some("weight"))(
@@ -208,7 +242,7 @@ object StackingClassifier extends MLReadable[StackingClassifier] {
       val (metadata, learners, stacker) = StackingClassifierParams.loadImpl(path, sc, className)
       val sr = new StackingClassifier(metadata.uid)
       metadata.getAndSetParams(sr)
-      sr.setBaseLearners(learners.map(_.asInstanceOf[Predictor[Vector, _, _]]))
+      sr.setBaseLearners(learners)
       sr.setStacker(stacker)
     }
   }
@@ -223,12 +257,20 @@ class StackingClassificationModel(
     with StackingClassifierParams
     with MLWritable {
 
+  override def predict(features: Vector): Double = {
+    val predictions = models.flatMap(model =>
+      model match {
+        case model: ProbabilisticClassificationModel[Vector, _] if (getStackMethod == "proba") =>
+          model.predictProbability(features).toArray
+        case model: ClassificationModel[Vector, _] if (getStackMethod == "raw") =>
+          model.predictRaw(features).toArray
+        case _ => Array(model.predict(features))
+      })
+    stack.predict(Vectors.dense(predictions))
+  }
+
   def this(models: Array[EnsemblePredictionModelType], stack: EnsemblePredictionModelType) =
     this(Identifiable.randomUID("StackingClassificationModel"), models, stack)
-
-  override def predict(features: Vector): Double = {
-    stack.predict(Vectors.dense(models.map(_.predict(features))))
-  }
 
   override def copy(extra: ParamMap): StackingClassificationModel = {
     val copied = new StackingClassificationModel(uid, models, stack)

@@ -215,15 +215,15 @@ class BaggingRegressionModel(
   def this(subspaces: Array[Array[Int]], models: Array[EnsemblePredictionModelType]) =
     this(Identifiable.randomUID("BaggingRegressionModel"), subspaces, models)
 
-  val numBaseModels: Int = models.length
+  val numModels: Int = models.length
 
   override def predict(features: Vector): Double = {
     var sum = 0d
     var i = 0
-    while (i < numBaseModels) {
+    while (i < numModels) {
       sum += models(i).predict(slice(subspaces(i))(features)); i += 1
     }
-    sum / numBaseModels
+    sum / numModels
   }
 
   override def copy(extra: ParamMap): BaggingRegressionModel = {
@@ -248,7 +248,7 @@ object BaggingRegressionModel extends MLReadable[BaggingRegressionModel] {
     private case class Data(subspace: Array[Int])
 
     override protected def saveImpl(path: String): Unit = {
-      val extraJson = "numBaseModels" -> instance.numBaseModels
+      val extraJson = "numModels" -> instance.numModels
       BaggingRegressorParams.saveImpl(instance, path, sc, Some(extraJson))
       instance.models.map(_.asInstanceOf[MLWritable]).zipWithIndex.foreach { case (model, idx) =>
         val modelPath = new Path(path, s"model-$idx").toString

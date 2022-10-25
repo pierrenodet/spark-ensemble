@@ -18,7 +18,6 @@ package org.apache.spark.ml.regression
 
 import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
-import org.apache.spark.ml.Predictor
 import org.apache.spark.ml.boosting.BoostingParams
 import org.apache.spark.ml.ensemble.EnsemblePredictionModelType
 import org.apache.spark.ml.ensemble.EnsembleRegressorType
@@ -136,7 +135,7 @@ private[ml] object BoostingRegressorParams {
 }
 
 class BoostingRegressor(override val uid: String)
-    extends Predictor[Vector, BoostingRegressor, BoostingRegressionModel]
+    extends Regressor[Vector, BoostingRegressor, BoostingRegressionModel]
     with BoostingRegressorParams
     with MLWritable {
 
