@@ -119,7 +119,7 @@ class GBMLossSuite extends AnyFunSuite with BeforeAndAfterAll with ScalaCheckPro
       val x = BDV[Double](1)
       val costFun =
         new RDDLossFunction(gbmInstances, getAggregatorFunc, None)
-      assert(GradientTester.test[Int, BDV[Double]](costFun, x).apply(0) < 1e-6)
+      assert(GradientTester.test[Int, BDV[Double]](costFun, x).apply(0) < 1e-5)
     }
 
   }
