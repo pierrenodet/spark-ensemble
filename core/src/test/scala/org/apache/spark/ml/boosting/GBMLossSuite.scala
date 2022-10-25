@@ -105,7 +105,7 @@ class GBMLossSuite extends AnyFunSuite with BeforeAndAfterAll with ScalaCheckPro
       }
 
     val gen = for {
-      loss <- Gen.oneOf(losses.appendedAll(gbmLossesWithHessian))
+      loss <- Gen.oneOf(losses ++ gbmLossesWithHessian)
     } yield (loss)
 
     forAll(gen) { case gbmLoss =>

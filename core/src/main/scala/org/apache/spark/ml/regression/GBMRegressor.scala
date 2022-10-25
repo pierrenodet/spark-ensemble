@@ -34,6 +34,7 @@ import org.apache.spark.ml.ensemble.EnsembleRegressorType
 import org.apache.spark.ml.ensemble.HasBaseLearner
 import org.apache.spark.ml.ensemble.Utils
 import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.optim.loss.RDDLossFunction
 import org.apache.spark.ml.param.DoubleParam
 import org.apache.spark.ml.param.Param
@@ -365,7 +366,7 @@ class GBMRegressor(override val uid: String)
 
         subbag.persist(StorageLevel.MEMORY_AND_DISK)
 
-        val pseudoResiduals = gbmLoss(quantile) match {
+        val pseudoResiduals:RDD[Instance] = gbmLoss(quantile) match {
           case gbmLoss: HasScalarHessian if (getUpdates == "newton") =>
             val hessians = subbag.map { case (instance, prediction) =>
               math.max(gbmLoss.hessian(instance.label, prediction), 1e-2)
