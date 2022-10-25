@@ -24,7 +24,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
-class DummyRegressorSuite
+class DummyClassifierSuite
     extends AnyFunSuite
     with BeforeAndAfterAll
     with ScalaCheckPropertyChecks {
@@ -54,18 +54,21 @@ class DummyRegressorSuite
   test("prediction is constant") {
 
     val gen = for {
-      strategy <- Gen.oneOf(DummyRegressorParams.supportedStrategy)
-      constant <- Gen.chooseNum(-100, 100)
-      alpha <- Gen.chooseNum(0.05, 0.95)
-    } yield (strategy, constant, alpha)
+      strategy <- Gen.oneOf(DummyClassifierParams.supportedStrategy)
+      constant <- Gen.chooseNum(0, 25)
+    } yield (strategy, constant)
 
     val data =
-      spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm").cache()
+      spark.read
+        .format("libsvm")
+        .load("data/letter/letter.svm")
+        .withColumn("label", col("label") - lit(1))
+        .cache()
     data.count()
 
-    forAll(gen) { case (strategy, constant, alpha) =>
+    forAll(gen) { case (strategy, constant) =>
       val dummy =
-        new DummyRegressor().setStrategy(strategy).setConstant(constant).setQuantile(alpha)
+        new DummyClassifier().setStrategy(strategy).setConstant(constant)
       val dummyModel = dummy.fit(data)
       val predictions =
         dummyModel.transform(data).select("prediction").collect().map(_.getDouble(0))
@@ -75,52 +78,19 @@ class DummyRegressorSuite
 
   }
 
-  test("const is equal to right statistics") {
-
-    val gen = for {
-      strategy <- Gen.oneOf(DummyRegressorParams.supportedStrategy)
-      constant <- Gen.chooseNum(-100, 100)
-      alpha <- Gen.chooseNum(0.05, 0.95)
-    } yield (strategy, constant, alpha)
-
-    val data =
-      spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm").cache()
-    data.count()
-
-    forAll(gen) { case (strategy, constant, alpha) =>
-      val dummy =
-        new DummyRegressor()
-          .setStrategy(strategy)
-          .setConstant(constant)
-          .setQuantile(alpha)
-          .setTol(0.0)
-
-      val dummyModel = dummy.fit(data)
-      val res = strategy match {
-        case "mean" => data.select(mean("label")).first().getDouble(0)
-        case "median" => data.stat.approxQuantile("label", Array(0.5), 0.0)(0)
-        case "quantile" => data.stat.approxQuantile("label", Array(alpha), 0.0)(0)
-        case "constant" => constant
-      }
-
-      assert(dummyModel.transform(data).select("prediction").first().getDouble(0) == res)
-    }
-
-  }
-
   test("read/write") {
     val data =
       spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm").cache()
     data.count()
 
-    val dummy = new DummyRegressor()
+    val dummy = new DummyClassifier()
 
     val splits = data.randomSplit(Array(0.8, 0.2), 0L)
     val (train, test) = (splits(0), splits(1))
 
     val dummyModel = dummy.fit(train)
-    dummyModel.write.overwrite().save("/tmp/dummyr")
-    val loaded = DummyRegressionModel.load("/tmp/dummyr")
+    dummyModel.write.overwrite().save("/tmp/dummyc")
+    val loaded = DummyClassificationModel.load("/tmp/dummyc")
 
     assert(dummyModel.transform(test).collect() === loaded.transform(test).collect())
   }

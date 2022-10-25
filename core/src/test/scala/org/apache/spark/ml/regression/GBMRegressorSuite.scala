@@ -103,7 +103,7 @@ class GBMRegressorSuite extends AnyFunSuite with BeforeAndAfterAll with ScalaChe
 
     val metrics = ListBuffer.empty[Double]
     Array
-      .range(0, gbmrNoValModel.numBaseModels + 1)
+      .range(0, gbmrNoValModel.numModels + 1)
       .foreach(i => {
         val model =
           new GBMRegressionModel(
@@ -119,7 +119,7 @@ class GBMRegressorSuite extends AnyFunSuite with BeforeAndAfterAll with ScalaChe
       .collect { case (h :: t) => h - t.head < 0.01 * math.max(0.01, t.head) }
       .indexOf(true)
 
-    assert(gbmrWithValModel.numBaseModels == earlyStop)
+    assert(gbmrWithValModel.numModels == earlyStop)
 
   }
 
@@ -144,7 +144,7 @@ class GBMRegressorSuite extends AnyFunSuite with BeforeAndAfterAll with ScalaChe
 
     val metrics = ListBuffer.empty[Double]
     Array
-      .range(0, gbmrModel.numBaseModels + 1)
+      .range(0, gbmrModel.numModels + 1)
       .foreach(i => {
         val model =
           new GBMRegressionModel(
@@ -177,8 +177,8 @@ class GBMRegressorSuite extends AnyFunSuite with BeforeAndAfterAll with ScalaChe
     val (train, test) = (splits(0), splits(1))
 
     val brModel = br.fit(train)
-    brModel.write.overwrite().save("/tmp/kek")
-    val loaded = GBMRegressionModel.load("/tmp/kek")
+    brModel.write.overwrite().save("/tmp/gbmr")
+    val loaded = GBMRegressionModel.load("/tmp/gbmr")
 
     assert(brModel.transform(test).collect() === loaded.transform(test).collect())
   }

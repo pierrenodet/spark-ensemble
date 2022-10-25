@@ -145,8 +145,8 @@ class BoostingRegressorSuite extends AnyFunSuite with BeforeAndAfterAll {
     val (train, test) = (splits(0), splits(1))
 
     val brModel = br.fit(train)
-    brModel.write.overwrite().save("/tmp/kek")
-    val loaded = BoostingRegressionModel.load("/tmp/kek")
+    brModel.write.overwrite().save("/tmp/boostingr")
+    val loaded = BoostingRegressionModel.load("/tmp/boostingr")
 
     assert(brModel.transform(test).collect() === loaded.transform(test).collect())
   }

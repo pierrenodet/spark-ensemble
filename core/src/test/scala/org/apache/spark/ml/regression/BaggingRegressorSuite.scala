@@ -122,8 +122,8 @@ class BaggingRegressorSuite extends AnyFunSuite with BeforeAndAfterAll {
     val (train, test) = (splits(0), splits(1))
 
     val brModel = br.fit(train)
-    brModel.write.overwrite().save("/tmp/kek")
-    val loaded = BaggingRegressionModel.load("/tmp/kek")
+    brModel.write.overwrite().save("/tmp/baggingr")
+    val loaded = BaggingRegressionModel.load("/tmp/baggingr")
 
     assert(brModel.transform(test).collect() === loaded.transform(test).collect())
   }

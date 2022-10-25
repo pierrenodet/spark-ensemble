@@ -44,8 +44,6 @@ ThisBuild / versionScheme := Some("semver-spec")
 
 lazy val commonSettings = Seq(
   scalacOptions += "-Wunused:imports",
-  javaOptions += "-Xmx2G",
-  javaOptions += "-Xms2G",
   Compile / doc / scalacOptions --= Seq("-Xfatal-warnings"),
   Compile / doc / scalacOptions ++= Seq(
     "-groups",

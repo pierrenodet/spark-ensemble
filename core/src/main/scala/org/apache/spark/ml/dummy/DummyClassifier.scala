@@ -99,24 +99,28 @@ class DummyClassifier(override val uid: String)
       instr.logNumClasses(numClasses)
       validateNumClasses(numClasses)
 
-      val prediction = getStrategy match {
-        case "uniform" => Array.fill(numClasses)(1.0 / numClasses)
+      val (rawPrediction, probability) = getStrategy match {
+        case "uniform" => (Array.fill(numClasses)(0.0), Array.fill(numClasses)(1.0 / numClasses))
         case "prior" => {
-          val numInstances = dataset.count()
+          val numInstances = dataset.count().toDouble
           val priors = dataset.groupBy("label").count().collect().map { row =>
-            (row.getDouble(0).toInt, row.getDouble(1))
+            (row.getDouble(0).toInt, row.getLong(1))
           }
-          priors.sortBy(_._1).map(_._2)
+          val sorted = priors.sortBy(_._1).map(_._2 / numInstances)
+          (sorted.map(math.log(_)), sorted)
         }
         case "constant" => {
           validateLabel($(constant), numClasses)
           val tmp = Array.fill(numClasses)(0.0)
           tmp($(constant).toInt) = 1.0
-          tmp
+          (tmp, tmp)
         }
       }
 
-      new DummyClassificationModel(numClasses, Vectors.dense(prediction))
+      new DummyClassificationModel(
+        numClasses,
+        Vectors.dense(rawPrediction),
+        Vectors.dense(probability))
 
   }
 
@@ -127,16 +131,22 @@ object DummyClassifier extends DefaultParamsReadable[DummyClassifier]
 class DummyClassificationModel(
     override val uid: String,
     override val numClasses: Int,
-    val prediction: Vector)
+    val rawPrediction: Vector,
+    val probability: Vector)
     extends ProbabilisticClassificationModel[Vector, DummyClassificationModel]
     with DummyClassifierParams
     with MLWritable {
 
-  def this(numClasses: Int, prediction: Vector) =
-    this(Identifiable.randomUID("DummyClassificationModel"), numClasses, prediction)
+  def this(numClasses: Int, rawPrediction: Vector, probability: Vector) =
+    this(
+      Identifiable.randomUID("DummyClassificationModel"),
+      numClasses,
+      rawPrediction,
+      probability)
 
   override def copy(extra: ParamMap): DummyClassificationModel = {
-    val copied = new DummyClassificationModel(uid, numClasses, prediction).setParent(parent)
+    val copied =
+      new DummyClassificationModel(uid, numClasses, rawPrediction, probability).setParent(parent)
     copyValues(copied, extra)
   }
 
@@ -152,14 +162,14 @@ class DummyClassificationModel(
   def setTol(value: Double): this.type =
     set(tol, value)
 
-  override def predictRaw(features: Vector): Vector = prediction
+  override def predictRaw(features: Vector): Vector = rawPrediction
 
-  override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = rawPrediction
+  override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = probability
 
   override def write: MLWriter = new DummyClassificationModel.DummyClassificationModelWriter(this)
 
   override def toString: String = {
-    s"DummyClassificationModel: uid=$uid, prediction=$prediction"
+    s"DummyClassificationModel: uid=$uid, rawPrediction=$rawPrediction, probability=$probability"
   }
 
 }
@@ -181,7 +191,8 @@ object DummyClassificationModel extends MLReadable[DummyClassificationModel] {
         path,
         sc,
         Some(
-          ("prediction" -> instance.prediction.toArray.toList) ~
+          ("rawPrediction" -> instance.rawPrediction.toArray.toList) ~
+            ("probability" -> instance.probability.toArray.toList) ~
             ("numClasses" -> instance.numClasses)))
     }
   }
@@ -194,10 +205,15 @@ object DummyClassificationModel extends MLReadable[DummyClassificationModel] {
     override def load(path: String): DummyClassificationModel = {
       implicit val format: DefaultFormats = DefaultFormats
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
-      val prediction = (metadata.metadata \ "prediction").extract[List[Double]]
+      val rawPrediction = (metadata.metadata \ "rawPrediction").extract[List[Double]]
+      val probability = (metadata.metadata \ "probability").extract[List[Double]]
       val numClasses = (metadata.metadata \ "numClasses").extract[Int]
       val model =
-        new DummyClassificationModel(metadata.uid, numClasses, Vectors.dense(prediction.toArray))
+        new DummyClassificationModel(
+          metadata.uid,
+          numClasses,
+          Vectors.dense(rawPrediction.toArray),
+          Vectors.dense(probability.toArray))
       metadata.getAndSetParams(model)
       model
     }

@@ -48,14 +48,18 @@ class BaggingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
   test("bagging classifier is better than baseline classifier") {
 
     val data =
-      spark.read.format("libsvm").load("data/vehicle/vehicle.svm").cache()
+      spark.read
+        .format("libsvm")
+        .load("data/letter/letter.svm")
+        .withColumn("label", col("label") - lit(1))
+        .cache()
     data.count()
 
-    val lr = new DecisionTreeClassifier()
+    val dtc = new DecisionTreeClassifier()
     val bc = new BaggingClassifier()
-      .setBaseLearner(lr)
-      .setNumBaseLearners(10)
-      .setReplacement(false)
+      .setBaseLearner(dtc)
+      .setNumBaseLearners(20)
+      .setReplacement(true)
       .setSubsampleRatio(0.8)
       .setSubspaceRatio(0.8)
       .setParallelism(4)
@@ -66,25 +70,30 @@ class BaggingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
     val splits = data.randomSplit(Array(0.8, 0.2), 0L)
     val (train, test) = (splits(0), splits(1))
 
-    val lrModel = lr.fit(train)
+    val dtcModel = dtc.fit(train)
     val bcModel = bc.fit(train)
 
-    assert(mce.evaluate(lrModel.transform(test)) < mce.evaluate(bcModel.transform(test)))
+    assert(mce.evaluate(dtcModel.transform(test)) < mce.evaluate(bcModel.transform(test)))
 
   }
 
   test("bagging classifier is better than the best base classifier") {
 
     val data =
-      spark.read.format("libsvm").load("data/vehicle/vehicle.svm").cache()
+      spark.read
+        .format("libsvm")
+        .load("data/letter/letter.svm")
+        .withColumn("label", col("label") - lit(1))
+        .cache()
     data.count()
 
     val lr = new DecisionTreeClassifier()
     val bc = new BaggingClassifier()
       .setBaseLearner(lr)
-      .setNumBaseLearners(10)
-      .setReplacement(false)
-      .setSubsampleRatio(0.6)
+      .setNumBaseLearners(20)
+      .setReplacement(true)
+      .setSubsampleRatio(0.8)
+      .setSubspaceRatio(0.8)
       .setParallelism(4)
 
     val mce = new MulticlassClassificationEvaluator()
@@ -105,15 +114,20 @@ class BaggingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
   test("bagging classifier creates diversity among base classifiers") {
 
     val data =
-      spark.read.format("libsvm").load("data/vehicle/vehicle.svm").cache()
+      spark.read
+        .format("libsvm")
+        .load("data/letter/letter.svm")
+        .withColumn("label", col("label") - lit(1))
+        .cache()
     data.count()
 
     val lr = new DecisionTreeClassifier()
     val bc = new BaggingClassifier()
       .setBaseLearner(lr)
-      .setNumBaseLearners(10)
+      .setNumBaseLearners(20)
       .setReplacement(true)
-      .setSubsampleRatio(0.4)
+      .setSubsampleRatio(0.8)
+      .setSubspaceRatio(0.8)
       .setParallelism(4)
 
     val splits = data.randomSplit(Array(0.8, 0.2), 0L)
@@ -142,13 +156,17 @@ class BaggingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
 
   test("read/write") {
     val data =
-      spark.read.format("libsvm").load("data/vehicle/vehicle.svm").cache()
+      spark.read
+        .format("libsvm")
+        .load("data/letter/letter.svm")
+        .withColumn("label", col("label") - lit(1))
+        .cache()
     data.count()
 
     val lr = new DecisionTreeClassifier()
     val bc = new BaggingClassifier()
       .setBaseLearner(lr)
-      .setNumBaseLearners(1)
+      .setNumBaseLearners(4)
       .setReplacement(true)
       .setSubsampleRatio(0.4)
       .setParallelism(4)
@@ -157,8 +175,8 @@ class BaggingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
     val (train, test) = (splits(0), splits(1))
 
     val bcModel = bc.fit(train)
-    bcModel.write.overwrite().save("/tmp/kek")
-    val loaded = BaggingClassificationModel.load("/tmp/kek")
+    bcModel.write.overwrite().save("/tmp/baggingc")
+    val loaded = BaggingClassificationModel.load("/tmp/baggingc")
 
     assert(bcModel.transform(test).collect() === loaded.transform(test).collect())
   }

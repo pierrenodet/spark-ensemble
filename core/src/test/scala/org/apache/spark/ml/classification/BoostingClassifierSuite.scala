@@ -170,8 +170,8 @@ class BoostingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
     val (train, test) = (splits(0), splits(1))
 
     val bcModel = bc.fit(train)
-    bcModel.write.overwrite().save("/tmp/kek")
-    val loaded = BoostingClassificationModel.load("/tmp/kek")
+    bcModel.write.overwrite().save("/tmp/boostingc")
+    val loaded = BoostingClassificationModel.load("/tmp/boostingc")
 
     assert(bcModel.transform(test).collect() === loaded.transform(test).collect())
   }
