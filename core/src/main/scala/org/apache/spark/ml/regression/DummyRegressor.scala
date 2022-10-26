@@ -23,8 +23,6 @@ import org.apache.spark.ml.param.Param
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.ParamValidators
 import org.apache.spark.ml.param.shared.HasTol
-import org.apache.spark.ml.regression.RegressionModel
-import org.apache.spark.ml.regression.Regressor
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.Dataset

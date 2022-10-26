@@ -51,7 +51,7 @@ class StackingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
     val data =
       spark.read
         .format("libsvm")
-        .load("data/letter/letter.svm")
+        .load("../data/letter/letter.svm")
         .withColumn("label", col("label") - lit(1))
         .cache()
     data.count()
@@ -90,7 +90,7 @@ class StackingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
     val data =
       spark.read
         .format("libsvm")
-        .load("data/letter/letter.svm")
+        .load("../data/letter/letter.svm")
         .withColumn("label", col("label") - lit(1))
         .cache()
     data.count()
@@ -98,7 +98,7 @@ class StackingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
     val dtc = new DecisionTreeClassifier()
     val lr = new LogisticRegression().setRegParam(0.5).setElasticNetParam(1.0)
     val sc = new StackingClassifier()
-      .setBaseLearners(Array.fill(5)(dtc))
+      .setBaseLearners(Array.fill(4)(dtc))
       .setStacker(lr)
       .setParallelism(4)
 

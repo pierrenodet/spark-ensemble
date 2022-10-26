@@ -61,7 +61,7 @@ class DummyClassifierSuite
     val data =
       spark.read
         .format("libsvm")
-        .load("data/letter/letter.svm")
+        .load("../data/letter/letter.svm")
         .withColumn("label", col("label") - lit(1))
         .cache()
     data.count()
@@ -80,7 +80,7 @@ class DummyClassifierSuite
 
   test("read/write") {
     val data =
-      spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm").cache()
+      spark.read.format("libsvm").load("../data/cpusmall/cpusmall.svm").cache()
     data.count()
 
     val dummy = new DummyClassifier()

@@ -60,7 +60,7 @@ class DummyRegressorSuite
     } yield (strategy, constant, alpha)
 
     val data =
-      spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm").cache()
+      spark.read.format("libsvm").load("../data/cpusmall/cpusmall.svm").cache()
     data.count()
 
     forAll(gen) { case (strategy, constant, alpha) =>
@@ -84,7 +84,7 @@ class DummyRegressorSuite
     } yield (strategy, constant, alpha)
 
     val data =
-      spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm").cache()
+      spark.read.format("libsvm").load("../data/cpusmall/cpusmall.svm").cache()
     data.count()
 
     forAll(gen) { case (strategy, constant, alpha) =>
@@ -110,7 +110,7 @@ class DummyRegressorSuite
 
   test("read/write") {
     val data =
-      spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm").cache()
+      spark.read.format("libsvm").load("../data/cpusmall/cpusmall.svm").cache()
     data.count()
 
     val dummy = new DummyRegressor()

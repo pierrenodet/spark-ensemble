@@ -17,8 +17,6 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.ml.PredictorParams
-import org.apache.spark.ml.classification.ProbabilisticClassificationModel
-import org.apache.spark.ml.classification.ProbabilisticClassifier
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.DoubleParam

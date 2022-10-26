@@ -28,7 +28,6 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.boosting.GBMParams
 import org.apache.spark.ml.boosting._
-import org.apache.spark.ml.regression.DummyRegressor
 import org.apache.spark.ml.ensemble.EnsemblePredictionModelType
 import org.apache.spark.ml.ensemble.EnsembleRegressorType
 import org.apache.spark.ml.ensemble.HasBaseLearner

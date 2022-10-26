@@ -51,7 +51,7 @@ class GBMRegressorSuite extends AnyFunSuite with BeforeAndAfterAll with ScalaChe
   test("boosting regressor is better than baseline regressor") {
 
     val data =
-      spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm").cache()
+      spark.read.format("libsvm").load("../data/cpusmall/cpusmall.svm").cache()
 
     data.count()
 
@@ -80,7 +80,7 @@ class GBMRegressorSuite extends AnyFunSuite with BeforeAndAfterAll with ScalaChe
     val data =
       spark.read
         .format("libsvm")
-        .load("data/cpusmall/cpusmall.svm")
+        .load("../data/cpusmall/cpusmall.svm")
         .withColumn("validation", when(rand() > 0.2, true).otherwise(false))
         .cache()
 
@@ -126,7 +126,7 @@ class GBMRegressorSuite extends AnyFunSuite with BeforeAndAfterAll with ScalaChe
   test("more base learners improves performance") {
 
     val data =
-      spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm").cache()
+      spark.read.format("libsvm").load("../data/cpusmall/cpusmall.svm").cache()
     data.count()
 
     val dtr = new DecisionTreeRegressor()
@@ -165,7 +165,7 @@ class GBMRegressorSuite extends AnyFunSuite with BeforeAndAfterAll with ScalaChe
 
   test("read/write") {
     val data =
-      spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm").cache()
+      spark.read.format("libsvm").load("../data/cpusmall/cpusmall.svm").cache()
     data.count()
 
     val dtr = new DecisionTreeRegressor()

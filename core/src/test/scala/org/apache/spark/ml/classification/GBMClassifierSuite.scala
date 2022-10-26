@@ -16,7 +16,6 @@
 
 package org.apache.spark.ml.classification
 import org.apache.spark._
-import org.apache.spark.ml.classification._
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
 import org.apache.spark.ml.regression.DecisionTreeRegressor
 import org.apache.spark.sql._
@@ -54,7 +53,7 @@ class GBMClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
     val data =
       spark.read
         .format("libsvm")
-        .load("data/letter/letter.svm")
+        .load("../data/letter/letter.svm")
         .withColumn("label", col("label") - lit(1))
         .cache()
     data.count()
@@ -66,6 +65,7 @@ class GBMClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
       .setNumBaseLearners(3)
       .setLearningRate(1.0)
       .setUpdates("newton")
+      .setParallelism(26)
     val dtc = new DecisionTreeClassifier()
       .setMaxDepth(5)
     val bc = new BoostingClassifier()
@@ -91,7 +91,7 @@ class GBMClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
     val data =
       spark.read
         .format("libsvm")
-        .load("data/adult/adult.svm")
+        .load("../data/adult/adult.svm")
         .withColumn("label", (col("label") + lit(1)) / lit(2.0))
         .cache()
     data.count()
@@ -150,7 +150,7 @@ class GBMClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
     val data =
       spark.read
         .format("libsvm")
-        .load("data/letter/letter.svm")
+        .load("../data/letter/letter.svm")
         .withColumn("label", col("label") - lit(1))
         .cache()
     data.count()
@@ -194,7 +194,7 @@ class GBMClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
     val data =
       spark.read
         .format("libsvm")
-        .load("data/adult/adult.svm")
+        .load("../data/adult/adult.svm")
         .withColumn("label", (col("label") + lit(1)) / lit(2.0))
         .withColumn("validation", when(rand() > 0.2, true).otherwise(false))
         .cache()
@@ -208,14 +208,12 @@ class GBMClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
       .setUpdates("gradient")
       .setValidationIndicatorCol("validation")
       .setNumRounds(1)
-      .setParallelism(26)
 
     val gbmrNoVal = new GBMClassifier()
       .setBaseLearner(dtr)
       .setNumBaseLearners(10)
       .setLoss("binomial")
       .setUpdates("gradient")
-      .setParallelism(26)
 
     val mce = new MulticlassClassificationEvaluator().setMetricName("logLoss")
 
@@ -250,7 +248,7 @@ class GBMClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
     val data =
       spark.read
         .format("libsvm")
-        .load("data/letter/letter.svm")
+        .load("../data/letter/letter.svm")
         .withColumn("label", col("label") - lit(1))
         .cache()
     data.count()
@@ -275,7 +273,7 @@ class GBMClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
     val data =
       spark.read
         .format("libsvm")
-        .load("data/adult/adult.svm")
+        .load("../data/adult/adult.svm")
         .withColumn("label", (col("label") + lit(1)) / lit(2.0))
         .cache()
     data.count()

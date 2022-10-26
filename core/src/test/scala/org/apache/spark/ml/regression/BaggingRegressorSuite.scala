@@ -48,7 +48,7 @@ class BaggingRegressorSuite extends AnyFunSuite with BeforeAndAfterAll {
   test("bagging regressor is better than baseline regressor") {
 
     val data =
-      spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm").cache()
+      spark.read.format("libsvm").load("../data/cpusmall/cpusmall.svm").cache()
     data.count()
 
     val dt = new DecisionTreeRegressor()
@@ -57,7 +57,7 @@ class BaggingRegressorSuite extends AnyFunSuite with BeforeAndAfterAll {
       .setNumBaseLearners(20)
       .setSubsampleRatio(0.7)
       .setSubspaceRatio(0.75)
-      .setParallelism(4)
+      .setParallelism(20)
     val rf = new RandomForestRegressor().setNumTrees(20).setSubsamplingRate(0.7)
 
     val re = new RegressionEvaluator().setMetricName("rmse")
@@ -77,7 +77,7 @@ class BaggingRegressorSuite extends AnyFunSuite with BeforeAndAfterAll {
   test("bagging regressor is better than the best base regressor") {
 
     val data =
-      spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm").cache()
+      spark.read.format("libsvm").load("../data/cpusmall/cpusmall.svm").cache()
     data.count()
 
     val dt = new DecisionTreeRegressor()
@@ -86,7 +86,7 @@ class BaggingRegressorSuite extends AnyFunSuite with BeforeAndAfterAll {
       .setNumBaseLearners(10)
       .setReplacement(false)
       .setSubsampleRatio(0.6)
-      .setParallelism(4)
+      .setParallelism(10)
 
     val re = new RegressionEvaluator().setMetricName("rmse")
 
@@ -104,16 +104,16 @@ class BaggingRegressorSuite extends AnyFunSuite with BeforeAndAfterAll {
 
   test("read/write") {
     val data =
-      spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm").cache()
+      spark.read.format("libsvm").load("../data/cpusmall/cpusmall.svm").cache()
     data.count()
 
     val dt = new DecisionTreeRegressor()
     val br = new BaggingRegressor()
       .setBaseLearner(dt)
-      .setNumBaseLearners(1)
+      .setNumBaseLearners(2)
       .setReplacement(true)
       .setSubsampleRatio(0.4)
-      .setParallelism(4)
+      .setParallelism(2)
 
     val splits = data.randomSplit(Array(0.8, 0.2), 0L)
     val (train, test) = (splits(0), splits(1))

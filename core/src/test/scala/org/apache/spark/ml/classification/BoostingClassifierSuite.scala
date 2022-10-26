@@ -53,7 +53,7 @@ class BoostingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
     val data =
       spark.read
         .format("libsvm")
-        .load("data/letter/letter.svm")
+        .load("../data/letter/letter.svm")
         .withColumn("label", col("label") - lit(1))
         .cache()
     data.count()
@@ -94,7 +94,7 @@ class BoostingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
     val data =
       spark.read
         .format("libsvm")
-        .load("data/letter/letter.svm")
+        .load("../data/letter/letter.svm")
         .withColumn("label", col("label") - lit(1))
         .cache()
     data.count()
@@ -126,7 +126,7 @@ class BoostingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
     val data =
       spark.read
         .format("libsvm")
-        .load("data/letter/letter.svm")
+        .load("../data/letter/letter.svm")
         .withColumn("label", col("label") - lit(1))
         .cache()
     data.count()

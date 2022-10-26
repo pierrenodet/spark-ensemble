@@ -51,7 +51,7 @@ class BoostingRegressorSuite extends AnyFunSuite with BeforeAndAfterAll {
   test("boosting regressor is better than baseline regressor") {
 
     val data =
-      spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm").cache()
+      spark.read.format("libsvm").load("../data/cpusmall/cpusmall.svm").cache()
 
     data.count()
 
@@ -78,7 +78,7 @@ class BoostingRegressorSuite extends AnyFunSuite with BeforeAndAfterAll {
   test("more base learners improves performance") {
 
     val data =
-      spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm").cache()
+      spark.read.format("libsvm").load("../data/cpusmall/cpusmall.svm").cache()
     data.count()
 
     val dtr = new DecisionTreeRegressor().setMaxDepth(10)
@@ -111,7 +111,7 @@ class BoostingRegressorSuite extends AnyFunSuite with BeforeAndAfterAll {
   test("weighted median is same as weighted mean") {
 
     val data =
-      spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm").cache()
+      spark.read.format("libsvm").load("../data/cpusmall/cpusmall.svm").cache()
     data.count()
 
     val dtr = new DecisionTreeRegressor().setMaxDepth(10)
@@ -133,7 +133,7 @@ class BoostingRegressorSuite extends AnyFunSuite with BeforeAndAfterAll {
 
   test("read/write") {
     val data =
-      spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm").cache()
+      spark.read.format("libsvm").load("../data/cpusmall/cpusmall.svm").cache()
     data.count()
 
     val dtr = new DecisionTreeRegressor()
@@ -168,7 +168,7 @@ class BoostingRegressorSuite extends AnyFunSuite with BeforeAndAfterAll {
 
   test("wrong label col throws error") {
     val data =
-      spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm").cache()
+      spark.read.format("libsvm").load("../data/cpusmall/cpusmall.svm").cache()
     data.count()
 
     val dtr = new DecisionTreeRegressor()

@@ -50,7 +50,12 @@ lazy val commonSettings = Seq(
     (LocalRootProject / baseDirectory).value.getAbsolutePath,
     "-doc-source-url",
     "https://github.com/pierrenodet/spark-ensemble/blob/v" + version.value + "€{FILE_PATH}.scala"),
-  Test / run / fork := true,
+  Test / fork := true,
+  javaOptions ++= Seq(
+    "-Xms512M",
+    "-Xmx2048M",
+    "-XX:MaxPermSize=2048M",
+    "-XX:+CMSClassUnloadingEnabled"),
   Test / parallelExecution := false)
 
 lazy val core = project

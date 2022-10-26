@@ -18,11 +18,6 @@ package org.apache.spark.ml.regression
 
 import org.apache.spark._
 import org.apache.spark.ml.evaluation.RegressionEvaluator
-import org.apache.spark.ml.regression.BoostingRegressor
-import org.apache.spark.ml.regression.DecisionTreeRegressor
-import org.apache.spark.ml.regression.GBMRegressor
-import org.apache.spark.ml.regression.LinearRegression
-import org.apache.spark.ml.regression.StackingRegressionModel
 import org.apache.spark.sql._
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuite
@@ -53,7 +48,7 @@ class StackingRegressorSuite extends AnyFunSuite with BeforeAndAfterAll {
   test("stacking regressor is better than baseline regressors") {
 
     val data =
-      spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm").cache()
+      spark.read.format("libsvm").load("../data/cpusmall/cpusmall.svm").cache()
     data.count()
 
     val dtr = new DecisionTreeRegressor()
@@ -66,9 +61,9 @@ class StackingRegressorSuite extends AnyFunSuite with BeforeAndAfterAll {
     val sc = new StackingRegressor()
       .setBaseLearners(Array(dtr, boostingr, gbmr, lr))
       .setStacker(lr)
+      .setParallelism(4)
 
     val re = new RegressionEvaluator().setMetricName("rmse")
-
 
     val splits = data.randomSplit(Array(0.8, 0.2), 0L)
     val (train, test) = (splits(0), splits(1))
@@ -83,7 +78,7 @@ class StackingRegressorSuite extends AnyFunSuite with BeforeAndAfterAll {
   test("stacking regressor is better than the best base regressor") {
 
     val data =
-      spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm").cache()
+      spark.read.format("libsvm").load("../data/cpusmall/cpusmall.svm").cache()
     data.count()
 
     val dtr = new DecisionTreeRegressor()
@@ -96,6 +91,7 @@ class StackingRegressorSuite extends AnyFunSuite with BeforeAndAfterAll {
     val sc = new StackingRegressor()
       .setBaseLearners(Array(dtr, boostingr, gbmr, lr))
       .setStacker(lr)
+      .setParallelism(4)
 
     val re = new RegressionEvaluator().setMetricName("rmse")
 
@@ -114,18 +110,13 @@ class StackingRegressorSuite extends AnyFunSuite with BeforeAndAfterAll {
 
   test("read/write") {
     val data =
-      spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm").cache()
+      spark.read.format("libsvm").load("../data/cpusmall/cpusmall.svm").cache()
     data.count()
 
     val dtr = new DecisionTreeRegressor()
-    val boostingr = new BoostingRegressor().setNumBaseLearners(5).setBaseLearner(dtr)
-    val gbmr =
-      new GBMRegressor()
-        .setNumBaseLearners(5)
-        .setBaseLearner(dtr)
     val lr = new LinearRegression()
     val sc = new StackingRegressor()
-      .setBaseLearners(Array(dtr, boostingr, gbmr, lr))
+      .setBaseLearners(Array.fill(4)(dtr))
       .setStacker(lr)
 
     val splits = data.randomSplit(Array(0.8, 0.2), 0L)

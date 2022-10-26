@@ -50,7 +50,7 @@ class BaggingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
     val data =
       spark.read
         .format("libsvm")
-        .load("data/letter/letter.svm")
+        .load("../data/letter/letter.svm")
         .withColumn("label", col("label") - lit(1))
         .cache()
     data.count()
@@ -62,7 +62,7 @@ class BaggingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
       .setReplacement(true)
       .setSubsampleRatio(0.8)
       .setSubspaceRatio(0.8)
-      .setParallelism(4)
+      .setParallelism(20)
 
     val mce = new MulticlassClassificationEvaluator()
       .setMetricName("accuracy")
@@ -82,7 +82,7 @@ class BaggingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
     val data =
       spark.read
         .format("libsvm")
-        .load("data/letter/letter.svm")
+        .load("../data/letter/letter.svm")
         .withColumn("label", col("label") - lit(1))
         .cache()
     data.count()
@@ -94,7 +94,7 @@ class BaggingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
       .setReplacement(true)
       .setSubsampleRatio(0.8)
       .setSubspaceRatio(0.8)
-      .setParallelism(4)
+      .setParallelism(20)
 
     val mce = new MulticlassClassificationEvaluator()
       .setMetricName("accuracy")
@@ -116,7 +116,7 @@ class BaggingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
     val data =
       spark.read
         .format("libsvm")
-        .load("data/letter/letter.svm")
+        .load("../data/letter/letter.svm")
         .withColumn("label", col("label") - lit(1))
         .cache()
     data.count()
@@ -128,7 +128,7 @@ class BaggingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
       .setReplacement(true)
       .setSubsampleRatio(0.8)
       .setSubspaceRatio(0.8)
-      .setParallelism(4)
+      .setParallelism(20)
 
     val splits = data.randomSplit(Array(0.8, 0.2), 0L)
     val (train, test) = (splits(0), splits(1))
@@ -158,7 +158,7 @@ class BaggingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
     val data =
       spark.read
         .format("libsvm")
-        .load("data/letter/letter.svm")
+        .load("../data/letter/letter.svm")
         .withColumn("label", col("label") - lit(1))
         .cache()
     data.count()
@@ -169,7 +169,7 @@ class BaggingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
       .setNumBaseLearners(2)
       .setReplacement(true)
       .setSubsampleRatio(0.4)
-      .setParallelism(4)
+      .setParallelism(2)
 
     val splits = data.randomSplit(Array(0.8, 0.2), 0L)
     val (train, test) = (splits(0), splits(1))
