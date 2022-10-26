@@ -18,31 +18,34 @@ package org.apache.spark.ml.regression
 
 import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
-import org.apache.spark.ml.ensemble.{
-  EnsemblePredictionModelType,
-  EnsemblePredictorType,
-  HasBaseLearners,
-  HasStacker
-}
+import org.apache.spark.ml.PredictionModel
+import org.apache.spark.ml.Predictor
+import org.apache.spark.ml.ensemble.EnsemblePredictionModelType
+import org.apache.spark.ml.ensemble.EnsembleRegressorType
+import org.apache.spark.ml.ensemble.HasBaseLearners
+import org.apache.spark.ml.ensemble.HasStacker
 import org.apache.spark.ml.feature.Instance
-import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.ParamPair
 import org.apache.spark.ml.param.shared.HasWeightCol
-import org.apache.spark.ml.param.{ParamMap, ParamPair}
 import org.apache.spark.ml.stacking.StackingParams
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.ml.util._
-import org.apache.spark.ml.{PredictionModel, Predictor}
-import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.Dataset
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ThreadUtils
+import org.json4s.DefaultFormats
+import org.json4s.JObject
 import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods.{parse, render}
-import org.json4s.{DefaultFormats, JObject}
+import org.json4s.jackson.JsonMethods.parse
+import org.json4s.jackson.JsonMethods.render
 
 import scala.concurrent.Future
 import scala.concurrent.duration.Duration
 
-private[ml] trait StackingRegressorParams extends StackingParams {}
+private[ml] trait StackingRegressorParams extends StackingParams[EnsembleRegressorType] {}
 
 private[ml] object StackingRegressorParams {
 
@@ -66,11 +69,11 @@ private[ml] object StackingRegressorParams {
   }
 
   def loadImpl(path: String, sc: SparkContext, expectedClassName: String)
-      : (DefaultParamsReader.Metadata, Array[EnsemblePredictorType], EnsemblePredictorType) = {
+      : (DefaultParamsReader.Metadata, Array[EnsembleRegressorType], EnsembleRegressorType) = {
 
     val metadata = DefaultParamsReader.loadMetadata(path, sc, expectedClassName)
-    val learners = HasBaseLearners.loadImpl(path, sc)
-    val stacker = HasStacker.loadImpl(path, sc)
+    val learners = HasBaseLearners.loadImpl[EnsembleRegressorType](path, sc)
+    val stacker = HasStacker.loadImpl[EnsembleRegressorType](path, sc)
     (metadata, learners, stacker)
 
   }
@@ -82,11 +85,11 @@ class StackingRegressor(override val uid: String)
     with StackingRegressorParams
     with MLWritable {
 
-  def setBaseLearners(value: Array[Predictor[_, _, _]]): this.type =
-    set(baseLearners, value.map(_.asInstanceOf[EnsemblePredictorType]))
+  def setBaseLearners(value: Array[EnsembleRegressorType]): this.type =
+    set(baseLearners, value)
 
-  def setStacker(value: Predictor[_, _, _]): this.type =
-    set(stacker, value.asInstanceOf[EnsemblePredictorType])
+  def setStacker(value: EnsembleRegressorType): this.type =
+    set(stacker, value)
 
   def setParallelism(value: Int): this.type = set(parallelism, value)
 
@@ -127,7 +130,8 @@ class StackingRegressor(override val uid: String)
         None
       }
 
-      val handlePersistence = dataset.storageLevel == StorageLevel.NONE && (df.storageLevel == StorageLevel.NONE)
+      val handlePersistence =
+        dataset.storageLevel == StorageLevel.NONE && (df.storageLevel == StorageLevel.NONE)
       if (handlePersistence) {
         df.persist(StorageLevel.MEMORY_AND_DISK)
       }
@@ -148,34 +152,21 @@ class StackingRegressor(override val uid: String)
 
       val models = futureModels.map(f => ThreadUtils.awaitResult(f, Duration.Inf)).toArray
 
-      val points = if (weightColIsUsed) {
-        df.select($(labelCol), $(weightCol), $(featuresCol)).rdd.map {
-          case Row(label: Double, weight: Double, features: Vector) =>
-            Instance(label, weight, features)
-        }
-      } else {
-        df.select($(labelCol), $(featuresCol)).rdd.map {
-          case Row(label: Double, features: Vector) =>
-            Instance(label, 1.0, features)
-        }
-      }
+      val points = extractInstances(df)
 
       val predictions =
-        points.map(
-          point =>
-            Instance(
-              point.label,
-              point.weight,
-              Vectors.dense(models.map(model => model.predict(point.features)))))
+        points.map(point =>
+          Instance(
+            point.label,
+            point.weight,
+            Vectors.dense(models.map(model => model.predict(point.features)))))
 
-      val predictionsDF = spark.createDataFrame(predictions)
+      val predictionsDF = spark
+        .createDataFrame(predictions)
 
-      val stack = fitBaseLearner(
-        getStacker,
-        "label",
-        "features",
-        getPredictionCol,
-        optWeightColName.map(_ => "weight"))(predictionsDF)
+      val stack =
+        fitBaseLearner($(stacker), "label", "features", getPredictionCol, Some("weight"))(
+          predictionsDF)
 
       df.unpersist()
 
@@ -211,7 +202,7 @@ object StackingRegressor extends MLReadable[StackingRegressor] {
       val (metadata, learners, stacker) = StackingRegressorParams.loadImpl(path, sc, className)
       val sr = new StackingRegressor(metadata.uid)
       metadata.getAndSetParams(sr)
-      sr.setBaseLearners(learners.map(_.asInstanceOf[Predictor[Vector, _, _]]))
+      sr.setBaseLearners(learners)
       sr.setStacker(stacker)
     }
   }
@@ -255,10 +246,9 @@ object StackingRegressionModel extends MLReadable[StackingRegressionModel] {
 
     override protected def saveImpl(path: String): Unit = {
       StackingRegressorParams.saveImpl(instance, path, sc)
-      instance.models.map(_.asInstanceOf[MLWritable]).zipWithIndex.foreach {
-        case (model, idx) =>
-          val modelPath = new Path(path, s"model-$idx").toString
-          model.save(modelPath)
+      instance.models.map(_.asInstanceOf[MLWritable]).zipWithIndex.foreach { case (model, idx) =>
+        val modelPath = new Path(path, s"model-$idx").toString
+        model.save(modelPath)
       }
       val stackPath = new Path(path, "stack").toString
       instance.stack.asInstanceOf[MLWritable].save(stackPath)

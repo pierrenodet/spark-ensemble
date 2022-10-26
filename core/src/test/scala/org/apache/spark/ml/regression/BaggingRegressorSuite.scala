@@ -1,103 +1,128 @@
+/*
+ * Copyright 2019 Pierre Nodet
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.ml.regression
-
-import com.holdenkarau.spark.testing.DatasetSuiteBase
+import org.apache.spark._
 import org.apache.spark.ml.evaluation.RegressionEvaluator
-import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
-import org.scalatest.FunSuite
+import org.apache.spark.sql._
+import org.scalatest.BeforeAndAfterAll
+import org.scalatest.funsuite.AnyFunSuite
 
-class BaggingRegressorSuite extends FunSuite with DatasetSuiteBase {
+import scala.collection.mutable.ListBuffer
 
-  test("benchmark") {
+class BaggingRegressorSuite extends AnyFunSuite with BeforeAndAfterAll {
 
-    val raw = spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm")
+  var spark: SparkSession = _
 
-    val bl = new DecisionTreeRegressor()
-    val br = new BaggingRegressor()
-      .setBaseLearner(bl)
-      .setParallelism(4)
-    val rf =
-      new RandomForestRegressor().setNumTrees(10)
+  override def beforeAll() {
 
-    val re = new RegressionEvaluator()
-      .setLabelCol("label")
-      .setPredictionCol("prediction")
-      .setMetricName("rmse")
+    spark = SparkSession
+      .builder()
+      .config(
+        new SparkConf()
+          .setMaster("local[*]")
+          .setAppName("example"))
+      .getOrCreate()
+    spark.sparkContext.setLogLevel("ERROR")
+    spark.sparkContext.setCheckpointDir("checkpoint")
 
-    val data = raw
-    data.cache().first()
-
-    time {
-      val brParamGrid = new ParamGridBuilder()
-        .addGrid(br.subspaceRatio, Array(0.7, 1))
-        .addGrid(br.numBaseLearners, Array(10))
-        .addGrid(br.replacement, Array(x = true))
-        .addGrid(br.sampleRatio, Array(0.7, 1))
-        .addGrid(bl.maxDepth, Array(10))
-        .addGrid(bl.maxBins, Array(30, 40))
-        .build()
-
-      val brCV = new CrossValidator()
-        .setEstimator(br)
-        .setEvaluator(re)
-        .setEstimatorParamMaps(brParamGrid)
-        .setNumFolds(3)
-        .setParallelism(4)
-
-      val brCVModel = brCV.fit(data)
-
-      println(brCVModel.avgMetrics.mkString(","))
-      print(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getReplacement + ",")
-      print(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getSampleRatio + ",")
-      print(brCVModel.bestModel.asInstanceOf[BaggingRegressionModel].getSubspaceRatio + ",")
-      print(
-        brCVModel.bestModel
-          .asInstanceOf[BaggingRegressionModel]
-          .models(0)
-          .asInstanceOf[DecisionTreeRegressionModel]
-          .getMaxDepth + ",")
-      println(
-        brCVModel.bestModel
-          .asInstanceOf[BaggingRegressionModel]
-          .models(0)
-          .asInstanceOf[DecisionTreeRegressionModel]
-          .getMaxBins)
-      println(brCVModel.avgMetrics.min)
-
-      val bm = brCVModel.bestModel.asInstanceOf[BaggingRegressionModel]
-      bm.write.overwrite().save("/tmp/bonjour")
-      val loaded = BaggingRegressionModel.load("/tmp/bonjour")
-      assert(re.evaluate(loaded.transform(data)) == re.evaluate(bm.transform(data)))
-
-    }
-
-    time {
-      val paramGrid = new ParamGridBuilder()
-        .addGrid(rf.featureSubsetStrategy, Array("auto"))
-        .addGrid(rf.numTrees, Array(10))
-        .addGrid(rf.subsamplingRate, Array(0.3, 0.7, 1))
-        .build()
-
-      val cv = new CrossValidator()
-        .setEstimator(rf)
-        .setEvaluator(re)
-        .setEstimatorParamMaps(paramGrid)
-        .setNumFolds(3)
-        .setParallelism(4)
-
-      val cvModel = cv.fit(data)
-
-      println(cvModel.avgMetrics.mkString(","))
-      println(cvModel.bestModel.asInstanceOf[RandomForestRegressionModel].getSubsamplingRate)
-      println(cvModel.avgMetrics.min)
-    }
   }
 
-  def time[R](block: => R): R = {
-    val t0 = System.nanoTime()
-    val result = block // call-by-name
-    val t1 = System.nanoTime()
-    println("Elapsed time: " + (t1 - t0) + "ns")
-    result
+  override def afterAll() {
+    spark.stop()
+  }
+
+  test("bagging regressor is better than baseline regressor") {
+
+    val data =
+      spark.read.format("libsvm").load("../data/cpusmall/cpusmall.svm").cache()
+    data.count()
+
+    val dt = new DecisionTreeRegressor()
+    val br = new BaggingRegressor()
+      .setBaseLearner(dt)
+      .setNumBaseLearners(20)
+      .setSubsampleRatio(0.7)
+      .setSubspaceRatio(0.75)
+      .setParallelism(20)
+    val rf = new RandomForestRegressor().setNumTrees(20).setSubsamplingRate(0.7)
+
+    val re = new RegressionEvaluator().setMetricName("rmse")
+
+    val splits = data.randomSplit(Array(0.8, 0.2), 0L)
+    val (train, test) = (splits(0), splits(1))
+
+    val dtModel = spark.time(dt.fit(train))
+    val brModel = spark.time(br.fit(train))
+    val rfModel = spark.time(rf.fit(train))
+
+    assert(re.evaluate(dtModel.transform(test)) > re.evaluate(brModel.transform(test)))
+    assert(re.evaluate(rfModel.transform(test)) > re.evaluate(brModel.transform(test)))
+
+  }
+
+  test("bagging regressor is better than the best base regressor") {
+
+    val data =
+      spark.read.format("libsvm").load("../data/cpusmall/cpusmall.svm").cache()
+    data.count()
+
+    val dt = new DecisionTreeRegressor()
+    val br = new BaggingRegressor()
+      .setBaseLearner(dt)
+      .setNumBaseLearners(10)
+      .setReplacement(false)
+      .setSubsampleRatio(0.6)
+      .setParallelism(10)
+
+    val re = new RegressionEvaluator().setMetricName("rmse")
+
+    val splits = data.randomSplit(Array(0.8, 0.2), 0L)
+    val (train, test) = (splits(0), splits(1))
+
+    val brModel = br.fit(train)
+    val metric = re.evaluate(brModel.transform(test))
+
+    val metrics = ListBuffer.empty[Double]
+    brModel.models.foreach(model => metrics += re.evaluate(model.transform(test)))
+
+    assert(metrics.min > metric)
+  }
+
+  test("read/write") {
+    val data =
+      spark.read.format("libsvm").load("../data/cpusmall/cpusmall.svm").cache()
+    data.count()
+
+    val dt = new DecisionTreeRegressor()
+    val br = new BaggingRegressor()
+      .setBaseLearner(dt)
+      .setNumBaseLearners(2)
+      .setReplacement(true)
+      .setSubsampleRatio(0.4)
+      .setParallelism(2)
+
+    val splits = data.randomSplit(Array(0.8, 0.2), 0L)
+    val (train, test) = (splits(0), splits(1))
+
+    val brModel = br.fit(train)
+    brModel.write.overwrite().save("/tmp/baggingr")
+    val loaded = BaggingRegressionModel.load("/tmp/baggingr")
+
+    assert(brModel.transform(test).collect() === loaded.transform(test).collect())
   }
 
 }

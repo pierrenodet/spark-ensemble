@@ -1,144 +1,186 @@
+/*
+ * Copyright 2019 Pierre Nodet
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.ml.regression
 
-import com.holdenkarau.spark.testing.DatasetSuiteBase
+import org.apache.spark.SparkConf
 import org.apache.spark.ml.evaluation.RegressionEvaluator
-import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
-import org.scalatest.FunSuite
-import org.apache.spark.ml.linalg.Vectors
+import org.scalatest.BeforeAndAfterAll
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
-class GBMRegressorSuite extends FunSuite with DatasetSuiteBase {
+import scala.collection.mutable.ListBuffer
 
-  test("benchmark") {
+class GBMRegressorSuite extends AnyFunSuite with BeforeAndAfterAll with ScalaCheckPropertyChecks {
 
-    val raw = spark.read.format("libsvm").load("data/cpusmall/cpusmall.svm")
+  var spark: SparkSession = _
 
-    val tree =
-      new DecisionTreeRegressor()
-    val gmbr = new GBMRegressor()
-      .setBaseLearner(tree)
-    val gbt =
-      new GBTRegressor()
+  override def beforeAll() {
 
-    val re = new RegressionEvaluator()
-      .setLabelCol("label")
-      .setPredictionCol("prediction")
-      .setMetricName("rmse")
+    spark = SparkSession
+      .builder()
+      .config(
+        new SparkConf()
+          .setMaster("local[*]")
+          .setAppName("example"))
+      .getOrCreate()
+    spark.sparkContext.setCheckpointDir("checkpoint")
+    spark.sparkContext.setLogLevel("ERROR")
+
+  }
+
+  override def afterAll() {
+    spark.stop()
+  }
+
+  test("boosting regressor is better than baseline regressor") {
 
     val data =
-      raw.withColumn("val", when(rand() > 0.8, true).otherwise(false))
-    data.cache().first()
+      spark.read.format("libsvm").load("../data/cpusmall/cpusmall.svm").cache()
 
-    time {
-      val gbmrParamGrid = new ParamGridBuilder()
-        .addGrid(gmbr.learningRate, Array(0.1))
-        .addGrid(gmbr.numBaseLearners, Array(30))
-        .addGrid(gmbr.validationIndicatorCol, Array("val"))
-        .addGrid(gmbr.tol, Array(1e-3))
-        .addGrid(gmbr.numRound, Array(8))
-        .addGrid(gmbr.sampleRatio, Array(0.8))
-        .addGrid(gmbr.replacement, Array(true))
-        .addGrid(gmbr.subspaceRatio, Array(0.8))
-        .addGrid(gmbr.optimizedWeights, Array(false, true))
-        .addGrid(gmbr.loss, Array("squared"))
-        .addGrid(gmbr.alpha, Array(0.5))
-        .build()
+    data.count()
 
-      val gmbrCV = new CrossValidator()
-        .setEstimator(gmbr)
-        .setEvaluator(re)
-        .setEstimatorParamMaps(gbmrParamGrid)
-        .setNumFolds(3)
-        .setParallelism(4)
+    val dtr = new DecisionTreeRegressor()
+    val gbmr = new GBMRegressor()
+      .setBaseLearner(dtr)
+      .setNumBaseLearners(10)
+    val gbtr = new GBTRegressor().setMaxIter(10)
 
-      val gbmrCVModel = gmbrCV.fit(data)
+    val re = new RegressionEvaluator().setMetricName("rmse")
 
-      println(gbmrCVModel.avgMetrics.mkString(","))
-      println(gbmrCVModel.bestModel.asInstanceOf[GBMRegressionModel].getLearningRate)
-      println(gbmrCVModel.bestModel.asInstanceOf[GBMRegressionModel].models.length)
-      println(gbmrCVModel.bestModel.asInstanceOf[GBMRegressionModel].const)
-      println(gbmrCVModel.bestModel.asInstanceOf[GBMRegressionModel].weights.mkString(","))
-      println(gbmrCVModel.bestModel.asInstanceOf[GBMRegressionModel].getLoss)
-      println(gbmrCVModel.bestModel.asInstanceOf[GBMRegressionModel].getOptimizedWeights)
-      println(gbmrCVModel.bestModel.asInstanceOf[GBMRegressionModel].getSampleRatio)
-      println(gbmrCVModel.bestModel.asInstanceOf[GBMRegressionModel].getReplacement)
-      println(gbmrCVModel.bestModel.asInstanceOf[GBMRegressionModel].getSubspaceRatio)
-      println(gbmrCVModel.avgMetrics.min)
+    val splits = data.randomSplit(Array(0.7, 0.3), 0L)
+    val (train, test) = (splits(0), splits(1))
 
-      val bm = gbmrCVModel.bestModel.asInstanceOf[GBMRegressionModel]
-      bm.write.overwrite().save("/tmp/bonjour")
-      val loaded = GBMRegressionModel.load("/tmp/bonjour")
-      assert(re.evaluate(loaded.transform(data)) == re.evaluate(bm.transform(data)))
+    val dtrModel = spark.time(dtr.fit(train))
+    val gbmrModel = spark.time(gbmr.fit(train))
+    val gbtrModel = spark.time(gbtr.fit(train))
 
-    }
+    assert(re.evaluate(dtrModel.transform(test)) > re.evaluate(gbmrModel.transform(test)))
+    assert(re.evaluate(gbtrModel.transform(test)) > re.evaluate(gbmrModel.transform(test)))
 
-    time {
-      val paramGrid = new ParamGridBuilder()
-        .addGrid(gbt.stepSize, Array(0.1))
-        .addGrid(gbt.maxDepth, Array(10))
-        .addGrid(gbt.maxIter, Array(30))
-        .addGrid(gbt.subsamplingRate, Array(0.8))
-        .addGrid(gbt.validationIndicatorCol, Array("val"))
-        .addGrid(gbt.lossType, Array("squared", "absolute"))
-        .build()
-
-      val cv = new CrossValidator()
-        .setEstimator(gbt)
-        .setEvaluator(re)
-        .setEstimatorParamMaps(paramGrid)
-        .setNumFolds(3)
-        .setParallelism(4)
-
-      val cvModel = cv.fit(data)
-
-      println(cvModel.avgMetrics.mkString(","))
-      println(cvModel.bestModel.asInstanceOf[GBTRegressionModel].getLossType)
-      println(cvModel.bestModel.asInstanceOf[GBTRegressionModel].getNumTrees)
-      println(cvModel.bestModel.asInstanceOf[GBTRegressionModel].getSubsamplingRate)
-      println(cvModel.bestModel.asInstanceOf[GBTRegressionModel].getStepSize)
-      println(cvModel.avgMetrics.min)
-    }
-
-    time {
-      val paramGrid = new ParamGridBuilder()
-        .build()
-
-      val cv = new CrossValidator()
-        .setEstimator(tree)
-        .setEvaluator(
-          new RegressionEvaluator()
-            .setLabelCol(gbt.getLabelCol)
-            .setPredictionCol(gbt.getPredictionCol)
-            .setMetricName("rmse"))
-        .setEstimatorParamMaps(paramGrid)
-        .setNumFolds(3)
-        .setParallelism(4)
-
-      val cvModel = cv.fit(data)
-
-      println(cvModel.avgMetrics.min)
-    }
   }
 
-  def time[R](block: => R): R = {
-    val t0 = System.nanoTime()
-    val result = block // call-by-name
-    val t1 = System.nanoTime()
-    println("Elapsed time: " + (t1 - t0) + "ns")
-    result
+  test("early stop works") {
+
+    val data =
+      spark.read
+        .format("libsvm")
+        .load("../data/cpusmall/cpusmall.svm")
+        .withColumn("validation", when(rand() > 0.2, true).otherwise(false))
+        .cache()
+
+    data.count()
+
+    val dtr = new DecisionTreeRegressor()
+    val gbmrWithVal = new GBMRegressor()
+      .setBaseLearner(dtr)
+      .setNumBaseLearners(10)
+      .setValidationIndicatorCol("validation")
+      .setNumRounds(1)
+    val gbmrNoVal = new GBMRegressor()
+      .setBaseLearner(dtr)
+      .setNumBaseLearners(10)
+
+    val re = new RegressionEvaluator().setMetricName("mse")
+
+    val gbmrWithValModel = spark.time(gbmrWithVal.fit(data))
+    val gbmrNoValModel = spark.time(gbmrNoVal.fit(data.filter(col("validation") === false)))
+
+    val metrics = ListBuffer.empty[Double]
+    Array
+      .range(0, gbmrNoValModel.numModels + 1)
+      .foreach(i => {
+        val model =
+          new GBMRegressionModel(
+            gbmrNoValModel.weights.take(i),
+            gbmrNoValModel.subspaces.take(i),
+            gbmrNoValModel.models.take(i),
+            gbmrNoValModel.init)
+        metrics += re.evaluate(model.transform(data.filter(col("validation") === true)))
+      })
+
+    val earlyStop = metrics.toList
+      .sliding(2)
+      .collect { case (h :: t) => h - t.head < 0.01 * math.max(0.01, t.head) }
+      .indexOf(true)
+
+    assert(gbmrWithValModel.numModels == earlyStop)
+
   }
 
-  test("trivial taks") {
-    val dr = new DecisionTreeRegressor()
+  test("more base learners improves performance") {
+
+    val data =
+      spark.read.format("libsvm").load("../data/cpusmall/cpusmall.svm").cache()
+    data.count()
+
+    val dtr = new DecisionTreeRegressor()
+    val gbmr = new GBMRegressor()
+      .setBaseLearner(dtr)
+      .setNumBaseLearners(6)
+      .setLearningRate(0.1)
+
+    val re = new RegressionEvaluator().setMetricName("rmse")
+
+    val splits = data.randomSplit(Array(0.7, 0.3), 0L)
+    val (train, test) = (splits(0), splits(1))
+
+    val gbmrModel = spark.time(gbmr.fit(train))
+
+    val metrics = ListBuffer.empty[Double]
+    Array
+      .range(0, gbmrModel.numModels + 1)
+      .foreach(i => {
+        val model =
+          new GBMRegressionModel(
+            gbmrModel.weights.take(i),
+            gbmrModel.subspaces.take(i),
+            gbmrModel.models.take(i),
+            gbmrModel.init)
+        metrics += re.evaluate(model.transform(test))
+      })
+
+    assert(
+      metrics.toList
+        .sliding(2)
+        .collect { case (h :: t) => h >= t.head }
+        .count(identity) / (metrics.size - 1.0) == 1.0)
+
+  }
+
+  test("read/write") {
+    val data =
+      spark.read.format("libsvm").load("../data/cpusmall/cpusmall.svm").cache()
+    data.count()
+
+    val dtr = new DecisionTreeRegressor()
     val br = new GBMRegressor()
-      .setBaseLearner(dr)
-      .setNumBaseLearners(20)
-    val x = Seq.fill(100)(Vectors.dense(Array(1.0, 1.0)))
-    val y = Seq.fill(100)(1.0)
-    import spark.implicits._
-    val data = spark.sparkContext.parallelize(x.zip(y)).toDF("features", "label")
-    val learned = br.fit(data)
-    learned.transform(data).show()
+      .setBaseLearner(dtr)
+      .setNumBaseLearners(5)
+
+    val splits = data.randomSplit(Array(0.8, 0.2), 0L)
+    val (train, test) = (splits(0), splits(1))
+
+    val brModel = br.fit(train)
+    brModel.write.overwrite().save("/tmp/gbmr")
+    val loaded = GBMRegressionModel.load("/tmp/gbmr")
+
+    assert(brModel.transform(test).collect() === loaded.transform(test).collect())
   }
 
 }

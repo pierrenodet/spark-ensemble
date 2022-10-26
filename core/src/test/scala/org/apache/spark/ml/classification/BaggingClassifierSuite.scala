@@ -1,84 +1,184 @@
+/*
+ * Copyright 2019 Pierre Nodet
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.ml.classification
-
-import com.holdenkarau.spark.testing.DatasetSuiteBase
+import org.apache.spark._
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
-import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
-import org.scalatest.FunSuite
+import org.apache.spark.sql._
+import org.apache.spark.sql.functions._
+import org.scalatest.BeforeAndAfterAll
+import org.scalatest.funsuite.AnyFunSuite
 
-class BaggingClassifierSuite extends FunSuite with DatasetSuiteBase {
+import scala.collection.mutable.ListBuffer
 
-  test("benchmark") {
+class BaggingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
 
-    val raw = spark.read.format("libsvm").load("data/vehicle/vehicle.svm")
+  var spark: SparkSession = _
 
-    val br = new BaggingClassifier()
-      .setBaseLearner(new DecisionTreeClassifier())
-      .setNumBaseLearners(10)
-      .setParallelism(4)
-    val rf = new RandomForestClassifier().setNumTrees(10)
+  override def beforeAll() {
 
-    val mce = new MulticlassClassificationEvaluator()
-      .setLabelCol("label")
-      .setPredictionCol("prediction")
+    spark = SparkSession
+      .builder()
+      .config(
+        new SparkConf()
+          .setMaster("local[*]")
+          .setAppName("example"))
+      .getOrCreate()
+    spark.sparkContext.setLogLevel("ERROR")
 
-    val data = raw
-    data.cache()
-
-    time {
-      val brParamGrid = new ParamGridBuilder()
-        .addGrid(br.subspaceRatio, Array(0.7, 1))
-        .addGrid(br.replacement, Array(true, false))
-        .addGrid(br.sampleRatio, Array(0.7, 1))
-        .build()
-
-      val brCV = new CrossValidator()
-        .setEstimator(br)
-        .setEvaluator(mce)
-        .setEstimatorParamMaps(brParamGrid)
-        .setNumFolds(5)
-        .setParallelism(4)
-
-      val brCVModel = brCV.fit(data)
-
-      println(brCVModel.avgMetrics.mkString(","))
-      print(brCVModel.bestModel.asInstanceOf[BaggingClassificationModel].getReplacement + ",")
-      print(brCVModel.bestModel.asInstanceOf[BaggingClassificationModel].getSampleRatio + ",")
-      println(brCVModel.bestModel.asInstanceOf[BaggingClassificationModel].getSubspaceRatio)
-      println(brCVModel.avgMetrics.max)
-
-      val bm = brCVModel.bestModel.asInstanceOf[BaggingClassificationModel]
-      bm.write.overwrite().save("/tmp/bonjour")
-      val loaded = BaggingClassificationModel.load("/tmp/bonjour")
-      assert(mce.evaluate(loaded.transform(data)) == mce.evaluate(bm.transform(data)))
-
-    }
-
-    time {
-      val paramGrid = new ParamGridBuilder()
-        .addGrid(rf.subsamplingRate, Array(0.3, 0.7, 1))
-        .build()
-
-      val cv = new CrossValidator()
-        .setEstimator(rf)
-        .setEvaluator(mce)
-        .setEstimatorParamMaps(paramGrid)
-        .setNumFolds(5)
-        .setParallelism(4)
-
-      val cvModel = cv.fit(data)
-
-      println(cvModel.avgMetrics.mkString(","))
-      println(cvModel.bestModel.asInstanceOf[RandomForestClassificationModel].getSubsamplingRate)
-      println(cvModel.avgMetrics.max)
-    }
   }
 
-  def time[R](block: => R): R = {
-    val t0 = System.nanoTime()
-    val result = block // call-by-name
-    val t1 = System.nanoTime()
-    println("Elapsed time: " + (t1 - t0) + "ns")
-    result
+  override def afterAll() {
+    spark.stop()
+  }
+
+  test("bagging classifier is better than baseline classifier") {
+
+    val data =
+      spark.read
+        .format("libsvm")
+        .load("../data/letter/letter.svm")
+        .withColumn("label", col("label") - lit(1))
+        .cache()
+    data.count()
+
+    val dtc = new DecisionTreeClassifier()
+    val bc = new BaggingClassifier()
+      .setBaseLearner(dtc)
+      .setNumBaseLearners(20)
+      .setReplacement(true)
+      .setSubsampleRatio(0.8)
+      .setSubspaceRatio(0.8)
+      .setParallelism(20)
+
+    val mce = new MulticlassClassificationEvaluator()
+      .setMetricName("accuracy")
+
+    val splits = data.randomSplit(Array(0.8, 0.2), 0L)
+    val (train, test) = (splits(0), splits(1))
+
+    val dtcModel = dtc.fit(train)
+    val bcModel = bc.fit(train)
+
+    assert(mce.evaluate(dtcModel.transform(test)) < mce.evaluate(bcModel.transform(test)))
+
+  }
+
+  test("bagging classifier is better than the best base classifier") {
+
+    val data =
+      spark.read
+        .format("libsvm")
+        .load("../data/letter/letter.svm")
+        .withColumn("label", col("label") - lit(1))
+        .cache()
+    data.count()
+
+    val lr = new DecisionTreeClassifier()
+    val bc = new BaggingClassifier()
+      .setBaseLearner(lr)
+      .setNumBaseLearners(20)
+      .setReplacement(true)
+      .setSubsampleRatio(0.8)
+      .setSubspaceRatio(0.8)
+      .setParallelism(20)
+
+    val mce = new MulticlassClassificationEvaluator()
+      .setMetricName("accuracy")
+
+    val splits = data.randomSplit(Array(0.8, 0.2), 0L)
+    val (train, test) = (splits(0), splits(1))
+
+    val bcModel = bc.fit(train)
+    val metric = mce.evaluate(bcModel.transform(test))
+
+    val metrics = ListBuffer.empty[Double]
+    bcModel.models.foreach(model => metrics += mce.evaluate(model.transform(test)))
+
+    assert(metrics.max < metric)
+  }
+
+  test("bagging classifier creates diversity among base classifiers") {
+
+    val data =
+      spark.read
+        .format("libsvm")
+        .load("../data/letter/letter.svm")
+        .withColumn("label", col("label") - lit(1))
+        .cache()
+    data.count()
+
+    val lr = new DecisionTreeClassifier()
+    val bc = new BaggingClassifier()
+      .setBaseLearner(lr)
+      .setNumBaseLearners(20)
+      .setReplacement(true)
+      .setSubsampleRatio(0.8)
+      .setSubspaceRatio(0.8)
+      .setParallelism(20)
+
+    val splits = data.randomSplit(Array(0.8, 0.2), 0L)
+    val (train, test) = (splits(0), splits(1))
+
+    val bcModel = bc.fit(train)
+
+    val mce = new MulticlassClassificationEvaluator()
+      .setLabelCol("pred1")
+      .setPredictionCol("pred2")
+      .setMetricName("accuracy")
+
+    val metrics = ListBuffer.empty[Double]
+    val cross = bcModel.models.sliding(2)
+    cross.foreach { case Array(model1, model2) =>
+      val pred1UDF = udf { model1.predict(_) }
+      val pred2UDF = udf { model2.predict(_) }
+      val predDF = test
+        .withColumn("pred1", pred1UDF(col("features")))
+        .withColumn("pred2", pred2UDF(col("features")))
+      metrics += mce.evaluate(predDF)
+    }
+
+    assert(metrics.max < 0.85)
+  }
+
+  test("read/write") {
+    val data =
+      spark.read
+        .format("libsvm")
+        .load("../data/letter/letter.svm")
+        .withColumn("label", col("label") - lit(1))
+        .cache()
+    data.count()
+
+    val lr = new DecisionTreeClassifier()
+    val bc = new BaggingClassifier()
+      .setBaseLearner(lr)
+      .setNumBaseLearners(2)
+      .setReplacement(true)
+      .setSubsampleRatio(0.4)
+      .setParallelism(2)
+
+    val splits = data.randomSplit(Array(0.8, 0.2), 0L)
+    val (train, test) = (splits(0), splits(1))
+
+    val bcModel = bc.fit(train)
+    bcModel.write.overwrite().save("/tmp/baggingc")
+    val loaded = BaggingClassificationModel.load("/tmp/baggingc")
+
+    assert(bcModel.transform(test).collect() === loaded.transform(test).collect())
   }
 
 }

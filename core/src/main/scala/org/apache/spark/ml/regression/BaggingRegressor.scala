@@ -16,34 +16,29 @@
 
 package org.apache.spark.ml.regression
 
-import java.util.UUID
-
 import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
-import org.apache.spark.ml.Predictor
 import org.apache.spark.ml.bagging.BaggingParams
-import org.apache.spark.ml.ensemble.HasSubBag.SubSpace
-import org.apache.spark.ml.ensemble.{
-  EnsemblePredictionModelType,
-  EnsemblePredictorType,
-  HasBaseLearner
-}
+import org.apache.spark.ml.ensemble.EnsemblePredictionModelType
+import org.apache.spark.ml.ensemble.EnsembleRegressorType
+import org.apache.spark.ml.ensemble.HasBaseLearner
+import org.apache.spark.ml.ensemble.Utils
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.Dataset
+import org.apache.spark.sql._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ThreadUtils
+import org.json4s.DefaultFormats
+import org.json4s.JObject
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
-import org.json4s.{DefaultFormats, JObject}
 
 import scala.concurrent.Future
 import scala.concurrent.duration.Duration
 
-private[ml] trait BaggingRegressorParams extends BaggingParams {}
+private[ml] trait BaggingRegressorParams extends BaggingParams[EnsembleRegressorType] {}
 
 private[ml] object BaggingRegressorParams {
 
@@ -68,10 +63,10 @@ private[ml] object BaggingRegressorParams {
   def loadImpl(
       path: String,
       sc: SparkContext,
-      expectedClassName: String): (DefaultParamsReader.Metadata, EnsemblePredictorType) = {
+      expectedClassName: String): (DefaultParamsReader.Metadata, EnsembleRegressorType) = {
 
     val metadata = DefaultParamsReader.loadMetadata(path, sc, expectedClassName)
-    val learner = HasBaseLearner.loadImpl(path, sc)
+    val learner = HasBaseLearner.loadImpl[EnsembleRegressorType](path, sc)
     (metadata, learner)
 
   }
@@ -79,15 +74,15 @@ private[ml] object BaggingRegressorParams {
 }
 
 class BaggingRegressor(override val uid: String)
-    extends Predictor[Vector, BaggingRegressor, BaggingRegressionModel]
+    extends Regressor[Vector, BaggingRegressor, BaggingRegressionModel]
     with BaggingRegressorParams
     with MLWritable {
 
   def this() = this(Identifiable.randomUID("BaggingRegressor"))
 
   /** @group setParam */
-  def setBaseLearner(value: Predictor[_, _, _]): this.type =
-    set(baseLearner, value.asInstanceOf[EnsemblePredictorType])
+  def setBaseLearner(value: EnsembleRegressorType): this.type =
+    set(baseLearner, value)
 
   /** @group setParam */
   def setWeightCol(value: String): this.type = set(weightCol, value)
@@ -96,7 +91,7 @@ class BaggingRegressor(override val uid: String)
   def setReplacement(value: Boolean): this.type = set(replacement, value)
 
   /** @group setParam */
-  def setSampleRatio(value: Double): this.type = set(sampleRatio, value)
+  def setSubsampleRatio(value: Double): this.type = set(subsampleRatio, value)
 
   /** @group setParam */
   def setSubspaceRatio(value: Double): this.type = set(subspaceRatio, value)
@@ -105,8 +100,8 @@ class BaggingRegressor(override val uid: String)
   def setNumBaseLearners(value: Int): this.type = set(numBaseLearners, value)
 
   /**
-   * Set the maximum level of parallelism to evaluate models in parallel.
-   * Default is 1 for serial evaluation
+   * Set the maximum level of parallelism to evaluate models in parallel. Default is 1 for serial
+   * evaluation
    *
    * @group expertSetParam
    */
@@ -129,70 +124,47 @@ class BaggingRegressor(override val uid: String)
         featuresCol,
         predictionCol,
         numBaseLearners,
-        sampleRatio,
+        subsampleRatio,
         replacement,
         subspaceRatio,
         seed)
 
-      val weightColIsUsed = isDefined(weightCol) && $(weightCol).nonEmpty && {
-        getBaseLearner match {
-          case _: HasWeightCol => true
-          case c =>
-            instr.logWarning(s"weightCol is ignored, as it is not supported by $c now.")
-            false
-        }
-      }
+      val spark = dataset.sparkSession
+      val sc = spark.sparkContext
 
-      val df = if (weightColIsUsed) {
-        dataset.select($(labelCol), $(weightCol), $(featuresCol))
-      } else {
-        dataset.select($(labelCol), $(featuresCol))
-      }
+      val instances = extractInstances(dataset)
+      instances.persist(StorageLevel.MEMORY_AND_DISK)
 
-      val optWeightColName = if (weightColIsUsed) {
-        Some($(weightCol))
-      } else {
-        None
-      }
+      val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
 
-      val handlePersistence = dataset.storageLevel == StorageLevel.NONE && (df.storageLevel == StorageLevel.NONE)
-      if (handlePersistence) {
-        df.persist(StorageLevel.MEMORY_AND_DISK)
-      }
+      val subspaces =
+        Array.tabulate($(numBaseLearners))(i =>
+          subspace($(subspaceRatio), numFeatures, $(seed) + i))
 
-      val bagColName = "gbm$bag" + UUID.randomUUID().toString
-      val bagged = df.transform(
-        withBag(getReplacement, getSampleRatio, getNumBaseLearners, getSeed, bagColName))
+      val futureModels = subspaces
+        .map(subspace =>
+          Future[EnsemblePredictionModelType] {
 
-      val numFeatures = MetadataUtils.getNumFeatures(df, getFeaturesCol)
+            val bagged = instances
+              .sample($(replacement), $(subsampleRatio), $(seed))
+            val subbagged =
+              bagged.map(instance => instance.copy(features = slice(subspace)(instance.features)))
 
-      val futureModels = Array
-        .range(0, getNumBaseLearners)
-        .map(iter =>
-          Future[(Array[Int], EnsemblePredictionModelType)] {
+            val featuresMetadata =
+              Utils.getFeaturesMetadata(dataset, $(featuresCol), Some(subspace))
 
-            val subspace = mkSubspace(getSampleRatio, numFeatures, getSeed + iter)
+            val df = spark
+              .createDataFrame(subbagged)
+              .withMetadata("features", featuresMetadata)
 
-            val subbag =
-              bagged.transform(extractSubBag(bagColName, iter, getFeaturesCol, subspace))
-
-            val bagger =
-              fitBaseLearner(
-                getBaseLearner,
-                getLabelCol,
-                getFeaturesCol,
-                getPredictionCol,
-                optWeightColName)(subbag)
-
-            (subspace, bagger)
+            fitBaseLearner($(baseLearner), "label", "features", $(predictionCol), Some("weight"))(
+              df)
 
           }(getExecutionContext))
 
-      val (subspaces, models) = futureModels.map(ThreadUtils.awaitResult(_, Duration.Inf)).unzip
+      val models = futureModels.map(ThreadUtils.awaitResult(_, Duration.Inf))
 
-      if (handlePersistence) {
-        df.unpersist()
-      }
+      instances.unpersist()
 
       new BaggingRegressionModel(subspaces, models)
 
@@ -234,25 +206,24 @@ object BaggingRegressor extends MLReadable[BaggingRegressor] {
 
 class BaggingRegressionModel(
     override val uid: String,
-    val subspaces: Array[SubSpace],
+    val subspaces: Array[Array[Int]],
     val models: Array[EnsemblePredictionModelType])
     extends RegressionModel[Vector, BaggingRegressionModel]
     with BaggingRegressorParams
     with MLWritable {
 
-  def this(subSpaces: Array[Array[Int]], models: Array[EnsemblePredictionModelType]) =
-    this(Identifiable.randomUID("BaggingRegressionModel"), subSpaces, models)
+  def this(subspaces: Array[Array[Int]], models: Array[EnsemblePredictionModelType]) =
+    this(Identifiable.randomUID("BaggingRegressionModel"), subspaces, models)
 
-  val numBaseModels: Int = models.length
+  val numModels: Int = models.length
 
   override def predict(features: Vector): Double = {
-    breeze.linalg.sum(
-      models
-        .zip(subspaces)
-        .map {
-          case (model, subspace) =>
-            model.predict(slicer(subspace)(features))
-        }) / numBaseModels
+    var sum = 0d
+    var i = 0
+    while (i < numModels) {
+      sum += models(i).predict(slice(subspaces(i))(features)); i += 1
+    }
+    sum / numModels
   }
 
   override def copy(extra: ParamMap): BaggingRegressionModel = {
@@ -274,21 +245,19 @@ object BaggingRegressionModel extends MLReadable[BaggingRegressionModel] {
       instance: BaggingRegressionModel)
       extends MLWriter {
 
-    private case class Data(subspace: SubSpace)
+    private case class Data(subspace: Array[Int])
 
     override protected def saveImpl(path: String): Unit = {
-      val extraJson = "numBaseModels" -> instance.numBaseModels
+      val extraJson = "numModels" -> instance.numModels
       BaggingRegressorParams.saveImpl(instance, path, sc, Some(extraJson))
-      instance.models.map(_.asInstanceOf[MLWritable]).zipWithIndex.foreach {
-        case (model, idx) =>
-          val modelPath = new Path(path, s"model-$idx").toString
-          model.save(modelPath)
+      instance.models.map(_.asInstanceOf[MLWritable]).zipWithIndex.foreach { case (model, idx) =>
+        val modelPath = new Path(path, s"model-$idx").toString
+        model.save(modelPath)
       }
-      instance.subspaces.zipWithIndex.foreach {
-        case (subSpace, idx) =>
-          val data = Data(subSpace)
-          val dataPath = new Path(path, s"data-$idx").toString
-          sparkSession.createDataFrame(Seq(data)).repartition(1).write.json(dataPath)
+      instance.subspaces.zipWithIndex.foreach { case (subspace, idx) =>
+        val data = Data(subspace)
+        val dataPath = new Path(path, s"data-$idx").toString
+        sparkSession.createDataFrame(Seq(data)).repartition(1).write.json(dataPath)
       }
 
     }
@@ -312,10 +281,10 @@ object BaggingRegressionModel extends MLReadable[BaggingRegressionModel] {
         val data = sparkSession.read.json(dataPath).select("subspace").head()
         data.getAs[Seq[Long]](0).map(_.toInt).toArray
       }
-      val bcModel = new BaggingRegressionModel(metadata.uid, subspaces, models)
-      metadata.getAndSetParams(bcModel)
-      bcModel.set("baseLearner", baseLearner)
-      bcModel
+      val brModel = new BaggingRegressionModel(metadata.uid, subspaces, models)
+      metadata.getAndSetParams(brModel)
+      brModel.set("baseLearner", baseLearner)
+      brModel
     }
   }
 }

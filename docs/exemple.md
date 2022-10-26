@@ -58,6 +58,6 @@ bestModel
 ## Save and Load
 
 ```scala
-bestModel.write.overwrite().save("/tmp/kek")
-val loaded = BaggingClassificationModel.load("/tmp/kek")
+bestModel.write.overwrite().save("/tmp/model")
+val loaded = BaggingClassificationModel.load("/tmp/model")
 ```

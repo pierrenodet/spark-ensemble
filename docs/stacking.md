@@ -14,8 +14,9 @@ import org.apache.spark.ml.classification.{StackingClassifier, RandomForestClass
 
 new StackingClassifier()
         .setBaseLearners(Array(new DecisionTreeClassifier(), new RandomForestClassifier())) //Base learners used by the meta-estimator.
+        .setStackMethod("proba") //Methods called for each base learner, only for classification.
         .setStacker(new DecisionTreeClassifier()) //Learner that will combine the predictions of base learners.
-        .setParallelism(4) //Number of base learners trained at the same time.
+        .setParallelism(4) //Number of base learners trained simultaneously.
 ```
 
 ## References

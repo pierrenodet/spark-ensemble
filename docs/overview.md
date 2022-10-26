@@ -3,13 +3,13 @@ id: overview
 title: Overview
 ---
 
-## Why ?
+## Why?
 
-Want to switch Decision Trees to Neural Net in Random Forest to make avNNet ?
+Want to switch Decision Trees to Neural Net in Random Forest to make avNNet?
 
-There is no curse in elvish, entish or the tongues of men for this treachery.
+There is no curse in elvish, entish, or the tongues of men for this treachery.
 
-But it's easy now !
+But it's easy now!
 
 ```scala
 val randomForest = new BaggingClassifier()
@@ -34,7 +34,7 @@ Here is the current list :
  
 They all work with Multiclass Classification and Regression.
 
-## Ready to Install ?
+## Ready to Install?
 
 Download the dependency from Maven Central
 
@@ -49,7 +49,7 @@ libraryDependencies += "com.github.pierrenodet" %% "spark-ensemble" % "@VERSION@
 ```maven-pom
 <dependency>
     <groupId>com.github.pierrenodet</groupId>
-    <artifactId>spark-ensemble_2.12</artifactId>
+    <artifactId>spark-ensemble_2.13</artifactId>
     <version>@VERSION@</version>
 </dependency>
 ```
