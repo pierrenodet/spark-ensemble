@@ -66,9 +66,11 @@ class HasSubBagSuite
     } yield (subspaceRatio, numFeatures, seed)
 
     forAll(gen) { case (subspaceRatio, numFeatures, seed) =>
+      val n = 1000
+      val subspaces = List.tabulate(n)(i => subspace(subspaceRatio, numFeatures, seed + i))
       assert(
         numFeatures * subspaceRatio ===
-          subspace(subspaceRatio, numFeatures, seed).size.toDouble +- 2.5)
+          subspaces.map(_.size).sum / n.toDouble +- 0.1)
     }
 
   }

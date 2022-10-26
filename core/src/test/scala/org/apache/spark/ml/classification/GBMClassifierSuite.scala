@@ -66,7 +66,6 @@ class GBMClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
       .setNumBaseLearners(3)
       .setLearningRate(1.0)
       .setUpdates("newton")
-      .setParallelism(26)
     val dtc = new DecisionTreeClassifier()
       .setMaxDepth(5)
     val bc = new BoostingClassifier()
@@ -259,7 +258,7 @@ class GBMClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
     val dtr = new DecisionTreeRegressor().setMaxDepth(3)
     val gbmc = new GBMClassifier()
       .setBaseLearner(dtr)
-      .setNumBaseLearners(2)
+      .setNumBaseLearners(1)
       .setParallelism(26)
 
     val splits = data.randomSplit(Array(0.7, 0.3), 0L)
