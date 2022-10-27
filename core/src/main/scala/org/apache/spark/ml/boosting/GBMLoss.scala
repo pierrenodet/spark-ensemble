@@ -290,7 +290,7 @@ case object ExponentialLoss
 
 }
 
-case object BinomialLoss extends GBMClassificationLoss with GBMScalarLoss with HasScalarHessian {
+case object BernoulliLoss extends GBMClassificationLoss with GBMScalarLoss with HasScalarHessian {
 
   override def dim: Int = 1
 

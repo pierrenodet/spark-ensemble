@@ -86,7 +86,7 @@ class GBMClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
 
   }
 
-  test("gbm exponential and binomial binary classification is better than baselines") {
+  test("gbm exponential and bernoulli binary classification is better than baselines") {
 
     val data =
       spark.read
@@ -110,7 +110,7 @@ class GBMClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
       .setBaseLearner(dtr)
       .setNumBaseLearners(numBaseLearners)
       .setLearningRate(1.0)
-      .setLoss("binomial")
+      .setLoss("bernoulli")
       .setUpdates("newton")
     val dtc = new DecisionTreeClassifier()
       .setMaxDepth(maxDepth)
@@ -204,7 +204,7 @@ class GBMClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
     val gbmrWithVal = new GBMClassifier()
       .setBaseLearner(dtr)
       .setNumBaseLearners(10)
-      .setLoss("binomial")
+      .setLoss("bernoulli")
       .setUpdates("gradient")
       .setValidationIndicatorCol("validation")
       .setNumRounds(1)
@@ -212,7 +212,7 @@ class GBMClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
     val gbmrNoVal = new GBMClassifier()
       .setBaseLearner(dtr)
       .setNumBaseLearners(10)
-      .setLoss("binomial")
+      .setLoss("bernoulli")
       .setUpdates("gradient")
 
     val mce = new MulticlassClassificationEvaluator().setMetricName("logLoss")

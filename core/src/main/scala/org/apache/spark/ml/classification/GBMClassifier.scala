@@ -76,7 +76,7 @@ private[ml] trait GBMClassifierParams extends GBMParams with HasParallelism {
 
   /**
    * Loss function which GBM tries to minimize. (case-insensitive) Supported: "logloss",
-   * "exponential", "binomial". (default = logloss)
+   * "exponential", "bernoulli". (default = logloss)
    *
    * @group param
    */
@@ -100,7 +100,7 @@ private[ml] trait GBMClassifierParams extends GBMParams with HasParallelism {
 private[ml] object GBMClassifierParams {
 
   final val supportedLossTypes: Array[String] =
-    Array("logloss", "exponential", "binomial").map(_.toLowerCase(Locale.ROOT))
+    Array("logloss", "exponential", "bernoulli").map(_.toLowerCase(Locale.ROOT))
 
   final val supportedInitStrategy: Array[String] =
     Array("uniform", "prior").map(_.toLowerCase(Locale.ROOT))
@@ -109,7 +109,7 @@ private[ml] object GBMClassifierParams {
     loss match {
       case "logloss" => LogLoss(numClasses)
       case "exponential" => ExponentialLoss
-      case "binomial" => BinomialLoss
+      case "bernoulli" => BernoulliLoss
       case _ => throw new RuntimeException(s"GBMClassifier was given bad loss type: $loss")
     }
 
