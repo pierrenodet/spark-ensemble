@@ -389,7 +389,7 @@ class GBMClassifier(override val uid: String)
 
               val df = spark
                 .createDataFrame(instances)
-                .withMetadata("features", featuresMetadata)
+                .withColumn("features", col("features"), featuresMetadata)
 
               val model =
                 fitBaseLearner(

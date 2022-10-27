@@ -365,7 +365,7 @@ class GBMRegressor(override val uid: String)
 
         subbag.persist(StorageLevel.MEMORY_AND_DISK)
 
-        val pseudoResiduals:RDD[Instance] = gbmLoss(quantile) match {
+        val pseudoResiduals: RDD[Instance] = gbmLoss(quantile) match {
           case gbmLoss: HasScalarHessian if (getUpdates == "newton") =>
             val hessians = subbag.map { case (instance, prediction) =>
               math.max(gbmLoss.hessian(instance.label, prediction), 1e-2)
@@ -389,7 +389,7 @@ class GBMRegressor(override val uid: String)
 
         val df = spark
           .createDataFrame(pseudoResiduals)
-          .withMetadata("features", featuresMetadata)
+          .withColumn("features", col("features"), featuresMetadata)
 
         val model =
           fitBaseLearner($(baseLearner), "label", "features", $(predictionCol), Some("weight"))(

@@ -30,6 +30,7 @@ import org.apache.spark.ml.param.ParamPair
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.functions._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ThreadUtils
 import org.json4s.DefaultFormats
@@ -190,7 +191,7 @@ class BaggingClassifier(override val uid: String)
 
             val df = spark
               .createDataFrame(subbag)
-              .withMetadata("features", featuresMetadata)
+              .withColumn("features", col("features"), featuresMetadata)
 
             fitBaseLearner($(baseLearner), "label", "features", $(predictionCol), Some("weight"))(
               df)

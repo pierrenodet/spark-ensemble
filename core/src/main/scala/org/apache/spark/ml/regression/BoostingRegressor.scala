@@ -33,6 +33,7 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.ml.util._
 import org.apache.spark.rdd.util.PeriodicRDDCheckpointer
 import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.functions._
 import org.apache.spark.storage.StorageLevel
 import org.json4s.DefaultFormats
 import org.json4s.JObject
@@ -221,7 +222,7 @@ class BoostingRegressor(override val uid: String)
 
         val df = spark
           .createDataFrame(weighted)
-          .withMetadata("features", featuresMetadata)
+          .withColumn("features", col("features"), featuresMetadata)
 
         val model =
           fitBaseLearner($(baseLearner), "label", "features", $(predictionCol), Some("weight"))(

@@ -31,6 +31,7 @@ import org.apache.spark.ml.param.{Param, ParamMap, ParamPair}
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.functions._
 import org.apache.spark.storage.StorageLevel
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{parse, render}
@@ -187,7 +188,7 @@ class BoostingClassifier(override val uid: String)
 
         val df = spark
           .createDataFrame(weighted)
-          .withMetadata("features", featuresMetadata)
+          .withColumn("features", col("features"), featuresMetadata)
 
         val model =
           fitBaseLearner($(baseLearner), "label", "features", $(predictionCol), Some("weight"))(
