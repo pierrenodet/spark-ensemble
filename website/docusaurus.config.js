@@ -1,8 +1,8 @@
 module.exports = {
     title: 'spark-ensemble',
     tagline: 'Ensemble Learning for Apache Spark',
-    url: 'https://pierrenodet.github.io/spark-ensemble',
-    baseUrl: '/spark-ensemble/',
+    url: 'https://pierrenodet.github.io',
+    baseUrl: 'spark-ensemble',
     favicon: "img/wood-color.png",
     organizationName: 'pierrenodet',
     projectName: 'spark-ensemble',

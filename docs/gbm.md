@@ -30,7 +30,7 @@ new GBMRegressor()
         .setInitStrategy("base") //Strategy for the initialization of predictions.
         .setLearningRate(0.1) //Shrinkage parameter.
         .setSubsampleRatio(0.8) //Ratio sampling of examples.
-        .setReplacement(true) //Exemples drawn with replacement or not.
+        .setReplacement(true) //Samples drawn with replacement or not.
         .setSubspaceRatio(0.8) //Ratio sampling of features.
         .setLoss("squared") //Loss function used for residuals and optimized step size.
         .setAlpha(0.5) //Quantile parameter for quantile or huber losses.
@@ -48,7 +48,7 @@ new GBMClassifier()
         .setInitStrategy("prior") //Strategy for the initialization of predictions.
         .setLearningRate(0.1) //Shrinkage parameter.
         .setSubsampleRatio(0.8) //Ratio sampling of examples.
-        .setReplacement(true) //Exemples drawn with replacement or not.
+        .setReplacement(true) //Samples drawn with replacement or not.
         .setSubspaceRatio(0.8) //Ratio sampling of features.
         .setLoss("logloss") //Loss function used for residuals and optimized step size.
         .setUpdates("newton") //Newton or Gradient boosting.

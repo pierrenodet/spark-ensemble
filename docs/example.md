@@ -1,6 +1,6 @@
 ---
-id: exemple
-title: Exemple
+id: example
+title: Example
 ---
 
 ## Building Base Learner

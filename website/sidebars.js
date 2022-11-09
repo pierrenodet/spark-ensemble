@@ -6,7 +6,7 @@ module.exports = {
       "boosting",
       "stacking",
       "gbm",
-      "exemple",
+      "example",
     ],
   },
 };
