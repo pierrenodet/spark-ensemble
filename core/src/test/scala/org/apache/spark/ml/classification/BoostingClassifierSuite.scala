@@ -25,6 +25,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers._
 
 import scala.collection.mutable.ListBuffer
+import org.apache.spark.ml.linalg.DenseVector
 
 class BoostingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
 
@@ -81,7 +82,7 @@ class BoostingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
           bcModel.models.take(i))
         metrics += mce.evaluate(model.transform(test))
       })
-    
+
     assert(
       metrics.toList
         .sliding(2)
@@ -120,6 +121,36 @@ class BoostingClassifierSuite extends AnyFunSuite with BeforeAndAfterAll {
 
     assert(
       mce.evaluate(bcrModel.transform(test)) === mce.evaluate(bcdModel.transform(test)) +- 0.02)
+  }
+
+  List("discrete", "real").foreach { algorithm =>
+    test(
+      f"$algorithm boosting decision function respects the symmetric constraint for weak learners") {
+      val data =
+        spark.read
+          .format("libsvm")
+          .load("../data/letter/letter.svm")
+          .withColumn("label", col("label") - lit(1))
+          .cache()
+      data.count()
+      val numClasses = data.select("label").distinct().count()
+
+      val lr = new DecisionTreeClassifier().setMaxDepth(1)
+      val boost = new BoostingClassifier()
+        .setBaseLearner(lr)
+        .setNumBaseLearners(10)
+        .setAlgorithm(algorithm)
+      val boostModel = boost.fit(data)
+
+      val predictions = boostModel
+        .transform(data)
+        .select("rawPrediction")
+        .distinct()
+        .collect()
+        .map(_.getAs[DenseVector](0).toArray)
+
+      predictions.foreach(raw => assert(raw.sum === 0.0 +- 1e-6))
+    }
   }
 
   test("read/write") {

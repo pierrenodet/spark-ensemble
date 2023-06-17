@@ -367,7 +367,15 @@ class BoostingClassificationModel(
     val res = Array.fill(numClasses)(0.0)
     var i = 0
     while (i < numModels) {
-      res(models(i).predict(features).toInt) += weights(i)
+      val prediction = models(i).predict(features).toInt
+      val weight = weights(i)
+      var c = 0
+      while (c < numClasses) {
+        if (prediction == c) {
+          res(c) += weight
+        } else { res(c) -= 1.0 / (numClasses - 1) * weight }
+        c += 1
+      }
       i += 1
     }
     Vectors.dense(res)

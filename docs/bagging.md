@@ -28,7 +28,7 @@ new BaggingClassifier()
         .setBaseLearner(new DecisionTreeClassifier()) //Base learner used by the meta-estimator.
         .setNumBaseLearners(10) //Number of base learners.
         .setSubsampleRatio(0.8) //Ratio sampling of examples.
-        .setReplacement(true) //Exemples drawn with replacement or not.
+        .setReplacement(true) //Samples drawn with replacement or not.
         .setSubspaceRatio(0.8) //Ratio sampling of features.
         .setVotingStrategy("soft") //Soft or Hard majority vote.
         .setParallelism(4) //Number of base learners trained simultaneously.
@@ -37,7 +37,7 @@ new BaggingRegressor()
         .setBaseLearner(new DecisionTreeRegressor()) //Base learner used by the meta-estimator.
         .setNumBaseLearners(10) //Number of base learners.
         .setSubsampleRatio(0.8) //Sampling ratio of examples.
-        .setReplacement(true) //Exemples drawn with replacement or not.
+        .setReplacement(true) //Samples drawn with replacement or not.
         .setSubspaceRatio(0.8) //Sampling ratio of features.
         .setParallelism(4) //Number of base learners trained simultaneously.
 ```
